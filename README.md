@@ -131,7 +131,3 @@ GET /api/note/{id}
 ## License
 
 MIT
-
----
-
-Made with 🔥 by [ravers.dev](https://ravers.dev)
