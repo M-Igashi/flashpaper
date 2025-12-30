@@ -403,6 +403,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 
                 <div id="note-display" style="display: none;">
                     <div id="note-content" class="note-content"></div>
+                    <button class="copy-btn" id="copy-note-btn" onclick="copyNote()">Copy Message</button>
                     <button onclick="window.location.href='/'">Create New Note</button>
                 </div>
             </div>
@@ -512,6 +513,15 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 createBtn.disabled = false;
                 createBtn.innerHTML = 'Create Secure Note';
             }
+        }
+        
+        function copyNote() {
+            const noteContent = document.getElementById("note-content").textContent;
+            navigator.clipboard.writeText(noteContent).then(() => {
+                const btn = document.getElementById("copy-note-btn");
+                btn.textContent = "Copied!";
+                setTimeout(() => btn.textContent = "Copy Message", 2000);
+            });
         }
         
         function copyLink() {
