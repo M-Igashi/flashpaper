@@ -37,7 +37,3 @@ A privacy-first, self-destructing notes service built entirely on Cloudflare Wor
 ## License
 
 MIT
-
----
-
-*Inspired by spy movies and the desire for truly private communication.*
