@@ -1,0 +1,16 @@
+name = "flashpaper"
+main = "src/worker.js"
+compatibility_date = "2024-12-01"
+
+[durable_objects]
+bindings = [
+  { name = "NOTE_STORE", class_name = "NoteStore" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["NoteStore"]
+
+# Cron trigger - runs every hour to clean up expired notes
+[triggers]
+crons = ["0 * * * *"]
