@@ -5,7 +5,8 @@ compatibility_date = "2024-12-01"
 [durable_objects]
 bindings = [
   { name = "NOTE_STORE", class_name = "NoteStore" },
-  { name = "STATS_STORE", class_name = "StatsStore" }
+  { name = "STATS_STORE", class_name = "StatsStore" },
+  { name = "CHAT_STORE", class_name = "ChatStore" }
 ]
 
 [[migrations]]
@@ -16,7 +17,11 @@ new_sqlite_classes = ["NoteStore"]
 tag = "v2"
 new_sqlite_classes = ["StatsStore"]
 
-# Cron trigger - runs every hour to clean up expired notes
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["ChatStore"]
+
+# Cron trigger - runs every hour to clean up expired notes and chats
 [triggers]
 crons = ["0 * * * *"]
 
