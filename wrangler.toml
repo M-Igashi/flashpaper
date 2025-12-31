@@ -30,6 +30,5 @@ new_sqlite_classes = ["ChatStore"]
 [triggers]
 crons = ["0 * * * *"]
 
-# Environment variables (set via Cloudflare dashboard or .dev.vars for local)
-[vars]
-CF_ANALYTICS_TOKEN = ""  # Set your Cloudflare Web Analytics token
+# Environment variables: Set CF_ANALYTICS_TOKEN via Cloudflare dashboard or .dev.vars for local dev
+# Do not add [vars] here as it will override dashboard settings on deploy
