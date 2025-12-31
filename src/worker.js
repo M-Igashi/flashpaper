@@ -132,6 +132,33 @@ export default {
         const statsStub = statsNamespace.get(statsNamespace.idFromName('global'));
         response = await statsStub.fetch(new Request('https://do/stats'));
         
+      // ===== STATIC FILES (R2) =====
+      } else if (method === 'GET' && path === '/google174732a25afed9fc.html') {
+        const object = await env.SITE_BUCKET.get('google174732a25afed9fc.html');
+        if (object === null) {
+          response = new Response('Not Found', { status: 404 });
+        } else {
+          return new Response(object.body, {
+            headers: { 
+              'Content-Type': 'text/html; charset=utf-8',
+              ...corsHeaders 
+            },
+          });
+        }
+
+      } else if (method === 'GET' && path === '/sitemap.xml') {
+        const object = await env.SITE_BUCKET.get('sitemap.xml');
+        if (object === null) {
+          response = new Response('Not Found', { status: 404 });
+        } else {
+          return new Response(object.body, {
+            headers: { 
+              'Content-Type': 'application/xml; charset=utf-8',
+              ...corsHeaders 
+            },
+          });
+        }
+
       // ===== HTML PAGES =====
       } else if (method === 'GET' && (path === '/' || path === '/index.html' || path === '/chat' || path === '/chat/new' || path.startsWith('/view/') || path.match(/^\/chat\/[^\/]+$/))) {
         const analyticsToken = env.CF_ANALYTICS_TOKEN || '';

@@ -2,6 +2,11 @@ name = "flashpaper"
 main = "src/worker.js"
 compatibility_date = "2024-12-01"
 
+# R2 bucket for static files (Google verification, sitemap)
+[[r2_buckets]]
+binding = "SITE_BUCKET"
+bucket_name = "misc"
+
 [durable_objects]
 bindings = [
   { name = "NOTE_STORE", class_name = "NoteStore" },

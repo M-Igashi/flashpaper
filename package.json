@@ -8,6 +8,6 @@
     "build": "cargo install worker-build && worker-build --release"
   },
   "devDependencies": {
-    "wrangler": "^3.99.0"
+    "wrangler": "^4.54.0"
   }
 }
