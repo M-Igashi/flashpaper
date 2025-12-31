@@ -1,8 +1,8 @@
 # Flashpaper 🔥📝
 
-Self-destructing encrypted notes and chats. A privacy-focused alternative to Privnote.
+Self-destructing encrypted notes and chats. A privacy-focused alternative to Privnote (without cookies, trackers, ads).
 
-**Live Demo:** [flashpaper.ravers.workers.dev](https://flashpaper.ravers.workers.dev/)
+**Live:** [flashpaper.ravers.workers.dev](https://flashpaper.ravers.workers.dev/)
 
 ## Features
 
@@ -50,7 +50,7 @@ This prevents:
 - Unauthorized access even with the correct URL
 - Session hijacking
 
-### What We Store in Application Database (Temporarily)
+### What We Store in Application Database (Temporarily, completely destroyed by user's destruction or expiry)
 - Encrypted ciphertext (unreadable without URL fragment key)
 - Token hashes (SHA-256, cannot reverse to original tokens)
 - Session ID hashes (SHA-256, bound on first access)
@@ -86,7 +86,7 @@ If you require IP-level anonymity, consider using Tor or a VPN.
 ## Self-Hosting
 
 ### Prerequisites
-- Cloudflare account with Workers Paid plan (for Durable Objects)
+- Cloudflare account (Free tier works!)
 - Node.js and npm
 - Wrangler CLI
 
@@ -206,6 +206,10 @@ GET /api/stats
 ## License
 
 MIT License - feel free to self-host and modify.
+
+## Statistics
+
+Number of messages is shown here: https://m-igashi.github.io/flashpaper/
 
 ## Contributing
 
