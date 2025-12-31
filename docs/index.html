@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flashpaper Stats - Live Usage Dashboard</title>
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #141414;
+            --bg-tertiary: #1a1a1a;
+            --text-primary: #e0e0e0;
+            --text-secondary: #888;
+            --accent: #ff6b35;
+            --accent-dim: #cc5629;
+            --success: #4ade80;
+            --border: #2a2a2a;
+        }
+        
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 300;
+            letter-spacing: 0.1em;
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+        }
+        
+        .tagline {
+            color: var(--text-secondary);
+            font-size: 1rem;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--accent);
+        }
+        
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 600;
+            color: var(--accent);
+            line-height: 1;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        .chart-container {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .chart-title {
+            color: var(--text-primary);
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .chart {
+            height: 200px;
+            display: flex;
+            align-items: flex-end;
+            gap: 4px;
+            padding-top: 1rem;
+        }
+        
+        .bar-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 0;
+        }
+        
+        .bar {
+            width: 100%;
+            background: var(--accent);
+            border-radius: 4px 4px 0 0;
+            min-height: 2px;
+            transition: height 0.3s ease;
+        }
+        
+        .bar-label {
+            font-size: 0.65rem;
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+            transform: rotate(-45deg);
+            white-space: nowrap;
+        }
+        
+        .bar-value {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.25rem;
+        }
+        
+        .meta {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            margin-bottom: 2rem;
+        }
+        
+        .meta a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 4rem;
+            color: var(--text-secondary);
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .error {
+            text-align: center;
+            padding: 2rem;
+            color: #ef4444;
+        }
+        
+        .refresh-btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: border-color 0.2s;
+        }
+        
+        .refresh-btn:hover {
+            border-color: var(--accent);
+        }
+        
+        footer {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border);
+        }
+        
+        footer a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+        
+        @media (max-width: 600px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .stat-value {
+                font-size: 1.8rem;
+            }
+            
+            .bar-label {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 FLASHPAPER STATS</h1>
+            <p class="tagline">Live usage statistics</p>
+        </header>
+        
+        <div id="content">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>Loading statistics...</p>
+            </div>
+        </div>
+        
+        <footer>
+            <p>
+                <a href="https://flashpaper.ravers.workers.dev" target="_blank">Create a Note</a> • 
+                <a href="https://github.com/M-Igashi/flashpaper" target="_blank">View Source</a>
+            </p>
+        </footer>
+    </div>
+    
+    <script>
+        const API_URL = 'https://flashpaper.ravers.workers.dev/api/stats';
+        
+        function formatNumber(num) {
+            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+            return num.toString();
+        }
+        
+        function formatDate(dateStr) {
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+        
+        async function loadStats() {
+            const content = document.getElementById('content');
+            
+            try {
+                const response = await fetch(API_URL);
+                if (!response.ok) throw new Error('Failed to fetch stats');
+                
+                const data = await response.json();
+                renderStats(data);
+                
+            } catch (error) {
+                console.error('Error:', error);
+                content.innerHTML = `
+                    <div class="error">
+                        <p>⚠️ Failed to load statistics</p>
+                        <p style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-secondary);">
+                            ${error.message}
+                        </p>
+                        <button class="refresh-btn" onclick="loadStats()" style="margin-top: 1rem;">
+                            Try Again
+                        </button>
+                    </div>
+                `;
+            }
+        }
+        
+        function renderStats(data) {
+            const content = document.getElementById('content');
+            const generatedAt = new Date(data.generated_at).toLocaleString();
+            
+            // Calculate max for chart scaling
+            const maxDaily = Math.max(...data.daily.map(d => d.count), 1);
+            
+            // Generate chart bars
+            const chartBars = data.daily.map(day => {
+                const height = (day.count / maxDaily) * 160;
+                return `
+                    <div class="bar-container">
+                        <div class="bar-value">${day.count}</div>
+                        <div class="bar" style="height: ${Math.max(height, 2)}px"></div>
+                        <div class="bar-label">${formatDate(day.date)}</div>
+                    </div>
+                `;
+            }).join('');
+            
+            content.innerHTML = `
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">${formatNumber(data.last_24h)}</div>
+                        <div class="stat-label">Last 24 Hours</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${formatNumber(data.last_7d)}</div>
+                        <div class="stat-label">Last 7 Days</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${formatNumber(data.last_30d)}</div>
+                        <div class="stat-label">Last 30 Days</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${formatNumber(data.last_365d)}</div>
+                        <div class="stat-label">Last Year</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${formatNumber(data.all_time)}</div>
+                        <div class="stat-label">All Time</div>
+                    </div>
+                </div>
+                
+                <div class="chart-container">
+                    <div class="chart-title">📈 Daily Notes Created (Last 30 Days)</div>
+                    <div class="chart">
+                        ${chartBars || '<p style="color: var(--text-secondary); text-align: center; width: 100%;">No data yet</p>'}
+                    </div>
+                </div>
+                
+                <div class="meta">
+                    <p>Last updated: ${generatedAt}</p>
+                    <button class="refresh-btn" onclick="loadStats()" style="margin-top: 0.5rem;">
+                        🔄 Refresh
+                    </button>
+                </div>
+            `;
+        }
+        
+        // Load stats on page load
+        loadStats();
+        
+        // Auto-refresh every 60 seconds
+        setInterval(loadStats, 60000);
+    </script>
+</body>
+</html>
