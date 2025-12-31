@@ -12,8 +12,7 @@
             --text-primary: #e0e0e0;
             --text-secondary: #888;
             --accent: #ff6b35;
-            --accent-dim: #cc5629;
-            --success: #4ade80;
+            --accent-chat: #6b8aff;
             --border: #2a2a2a;
         }
         
@@ -27,15 +26,9 @@
             padding: 2rem;
         }
         
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-        }
+        .container { max-width: 1000px; margin: 0 auto; }
         
-        header {
-            text-align: center;
-            margin-bottom: 3rem;
-        }
+        header { text-align: center; margin-bottom: 2rem; }
         
         h1 {
             font-size: 2.5rem;
@@ -45,43 +38,55 @@
             margin-bottom: 0.5rem;
         }
         
-        .tagline {
-            color: var(--text-secondary);
-            font-size: 1rem;
+        .tagline { color: var(--text-secondary); font-size: 1rem; }
+        
+        .section-title {
+            font-size: 1.2rem;
+            font-weight: 500;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
+        
+        .section-title.notes { color: var(--accent); }
+        .section-title.chats { color: var(--accent-chat); }
+        
+        .stats-section { margin-bottom: 2rem; }
         
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 0.75rem;
+            margin-bottom: 1rem;
         }
         
         .stat-card {
             background: var(--bg-secondary);
             border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 1.5rem;
+            border-radius: 10px;
+            padding: 1rem;
             text-align: center;
             transition: transform 0.2s, border-color 0.2s;
         }
         
-        .stat-card:hover {
-            transform: translateY(-2px);
-            border-color: var(--accent);
-        }
+        .stat-card:hover { transform: translateY(-2px); }
+        .stat-card.notes:hover { border-color: var(--accent); }
+        .stat-card.chats:hover { border-color: var(--accent-chat); }
         
         .stat-value {
-            font-size: 2.5rem;
+            font-size: 1.8rem;
             font-weight: 600;
-            color: var(--accent);
             line-height: 1;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.25rem;
         }
+        
+        .stat-value.notes { color: var(--accent); }
+        .stat-value.chats { color: var(--accent-chat); }
         
         .stat-label {
             color: var(--text-secondary);
-            font-size: 0.85rem;
+            font-size: 0.7rem;
             text-transform: uppercase;
             letter-spacing: 0.05em;
         }
@@ -91,20 +96,20 @@
             border: 1px solid var(--border);
             border-radius: 12px;
             padding: 1.5rem;
-            margin-bottom: 2rem;
+            margin-bottom: 1.5rem;
         }
         
         .chart-title {
             color: var(--text-primary);
-            font-size: 1.1rem;
+            font-size: 1rem;
             margin-bottom: 1rem;
         }
         
         .chart {
-            height: 200px;
+            height: 180px;
             display: flex;
             align-items: flex-end;
-            gap: 4px;
+            gap: 3px;
             padding-top: 1rem;
         }
         
@@ -116,38 +121,77 @@
             min-width: 0;
         }
         
+        .bar-stack {
+            width: 100%;
+            display: flex;
+            flex-direction: column-reverse;
+        }
+        
         .bar {
             width: 100%;
-            background: var(--accent);
-            border-radius: 4px 4px 0 0;
-            min-height: 2px;
+            min-height: 0;
             transition: height 0.3s ease;
         }
         
+        .bar.notes {
+            background: var(--accent);
+            border-radius: 3px 3px 0 0;
+        }
+        
+        .bar.chats {
+            background: var(--accent-chat);
+            border-radius: 3px 3px 0 0;
+        }
+        
+        .bar-stack .bar.notes { border-radius: 0; }
+        .bar-stack .bar.chats { border-radius: 3px 3px 0 0; }
+        .bar-stack .bar.notes:first-child { border-radius: 0 0 3px 3px; }
+        
         .bar-label {
-            font-size: 0.65rem;
+            font-size: 0.6rem;
             color: var(--text-secondary);
-            margin-top: 0.5rem;
-            transform: rotate(-45deg);
+            margin-top: 0.4rem;
             white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
         }
         
         .bar-value {
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             color: var(--text-secondary);
-            margin-bottom: 0.25rem;
+            margin-bottom: 0.2rem;
         }
+        
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 1.5rem;
+            margin-top: 1rem;
+            font-size: 0.85rem;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            color: var(--text-secondary);
+        }
+        
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+        
+        .legend-color.notes { background: var(--accent); }
+        .legend-color.chats { background: var(--accent-chat); }
         
         .meta {
             text-align: center;
             color: var(--text-secondary);
             font-size: 0.85rem;
             margin-bottom: 2rem;
-        }
-        
-        .meta a {
-            color: var(--accent);
-            text-decoration: none;
         }
         
         .loading {
@@ -167,9 +211,7 @@
             margin-bottom: 1rem;
         }
         
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
+        @keyframes spin { to { transform: rotate(360deg); } }
         
         .error {
             text-align: center;
@@ -188,9 +230,7 @@
             transition: border-color 0.2s;
         }
         
-        .refresh-btn:hover {
-            border-color: var(--accent);
-        }
+        .refresh-btn:hover { border-color: var(--accent); }
         
         footer {
             text-align: center;
@@ -200,23 +240,43 @@
             border-top: 1px solid var(--border);
         }
         
-        footer a {
-            color: var(--accent);
-            text-decoration: none;
+        footer a { color: var(--accent); text-decoration: none; }
+        
+        .total-card {
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            margin-bottom: 2rem;
         }
         
-        @media (max-width: 600px) {
-            .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-            
-            .stat-value {
-                font-size: 1.8rem;
-            }
-            
-            .bar-label {
-                display: none;
-            }
+        .total-value {
+            font-size: 3rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-chat) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .total-label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-top: 0.25rem;
+        }
+        
+        @media (max-width: 700px) {
+            .stats-grid { grid-template-columns: repeat(3, 1fr); }
+            .stats-grid .stat-card:nth-child(4),
+            .stats-grid .stat-card:nth-child(5) { grid-column: span 1; }
+            .stat-value { font-size: 1.4rem; }
+            .bar-label { display: none; }
+        }
+        
+        @media (max-width: 500px) {
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .stats-grid .stat-card:last-child { grid-column: span 2; }
         }
     </style>
 </head>
@@ -237,6 +297,7 @@
         <footer>
             <p>
                 <a href="https://flashpaper.ravers.workers.dev" target="_blank">Create a Note</a> • 
+                <a href="https://flashpaper.ravers.workers.dev/chat/new" target="_blank">Start a Chat</a> • 
                 <a href="https://github.com/M-Igashi/flashpaper" target="_blank">View Source</a>
             </p>
         </footer>
@@ -252,7 +313,7 @@
         }
         
         function formatDate(dateStr) {
-            const date = new Date(dateStr);
+            const date = new Date(dateStr + 'T00:00:00');
             return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         }
         
@@ -264,6 +325,7 @@
                 if (!response.ok) throw new Error('Failed to fetch stats');
                 
                 const data = await response.json();
+                if (data.error) throw new Error(data.error);
                 renderStats(data);
                 
             } catch (error) {
@@ -286,49 +348,106 @@
             const content = document.getElementById('content');
             const generatedAt = new Date(data.generated_at).toLocaleString();
             
-            // Calculate max for chart scaling
-            const maxDaily = Math.max(...data.daily.map(d => d.count), 1);
+            const notes = data.notes || { last_24h: data.last_24h, last_7d: data.last_7d, last_30d: data.last_30d, last_365d: data.last_365d, all_time: data.all_time };
+            const chats = data.chats || { last_24h: 0, last_7d: 0, last_30d: 0, last_365d: 0, all_time: 0 };
             
-            // Generate chart bars
+            const totalAllTime = notes.all_time + chats.all_time;
+            
+            // Calculate max for chart scaling
+            const maxDaily = Math.max(...data.daily.map(d => (d.note_count || d.count || 0) + (d.chat_count || 0)), 1);
+            
+            // Generate stacked chart bars
             const chartBars = data.daily.map(day => {
-                const height = (day.count / maxDaily) * 160;
+                const noteCount = day.note_count || day.count || 0;
+                const chatCount = day.chat_count || 0;
+                const total = noteCount + chatCount;
+                const noteHeight = (noteCount / maxDaily) * 140;
+                const chatHeight = (chatCount / maxDaily) * 140;
+                
                 return `
                     <div class="bar-container">
-                        <div class="bar-value">${day.count}</div>
-                        <div class="bar" style="height: ${Math.max(height, 2)}px"></div>
+                        <div class="bar-value">${total}</div>
+                        <div class="bar-stack" style="height: ${Math.max(noteHeight + chatHeight, 2)}px">
+                            ${chatCount > 0 ? `<div class="bar chats" style="height: ${chatHeight}px"></div>` : ''}
+                            ${noteCount > 0 ? `<div class="bar notes" style="height: ${noteHeight}px"></div>` : ''}
+                        </div>
                         <div class="bar-label">${formatDate(day.date)}</div>
                     </div>
                 `;
             }).join('');
             
             content.innerHTML = `
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-value">${formatNumber(data.last_24h)}</div>
-                        <div class="stat-label">Last 24 Hours</div>
+                <div class="total-card">
+                    <div class="total-value">${formatNumber(totalAllTime)}</div>
+                    <div class="total-label">Total Messages Created (All Time)</div>
+                </div>
+                
+                <div class="stats-section">
+                    <div class="section-title notes">📝 Notes</div>
+                    <div class="stats-grid">
+                        <div class="stat-card notes">
+                            <div class="stat-value notes">${formatNumber(notes.last_24h)}</div>
+                            <div class="stat-label">24 Hours</div>
+                        </div>
+                        <div class="stat-card notes">
+                            <div class="stat-value notes">${formatNumber(notes.last_7d)}</div>
+                            <div class="stat-label">7 Days</div>
+                        </div>
+                        <div class="stat-card notes">
+                            <div class="stat-value notes">${formatNumber(notes.last_30d)}</div>
+                            <div class="stat-label">30 Days</div>
+                        </div>
+                        <div class="stat-card notes">
+                            <div class="stat-value notes">${formatNumber(notes.last_365d)}</div>
+                            <div class="stat-label">1 Year</div>
+                        </div>
+                        <div class="stat-card notes">
+                            <div class="stat-value notes">${formatNumber(notes.all_time)}</div>
+                            <div class="stat-label">All Time</div>
+                        </div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-value">${formatNumber(data.last_7d)}</div>
-                        <div class="stat-label">Last 7 Days</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value">${formatNumber(data.last_30d)}</div>
-                        <div class="stat-label">Last 30 Days</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value">${formatNumber(data.last_365d)}</div>
-                        <div class="stat-label">Last Year</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value">${formatNumber(data.all_time)}</div>
-                        <div class="stat-label">All Time</div>
+                </div>
+                
+                <div class="stats-section">
+                    <div class="section-title chats">💬 Chats</div>
+                    <div class="stats-grid">
+                        <div class="stat-card chats">
+                            <div class="stat-value chats">${formatNumber(chats.last_24h)}</div>
+                            <div class="stat-label">24 Hours</div>
+                        </div>
+                        <div class="stat-card chats">
+                            <div class="stat-value chats">${formatNumber(chats.last_7d)}</div>
+                            <div class="stat-label">7 Days</div>
+                        </div>
+                        <div class="stat-card chats">
+                            <div class="stat-value chats">${formatNumber(chats.last_30d)}</div>
+                            <div class="stat-label">30 Days</div>
+                        </div>
+                        <div class="stat-card chats">
+                            <div class="stat-value chats">${formatNumber(chats.last_365d)}</div>
+                            <div class="stat-label">1 Year</div>
+                        </div>
+                        <div class="stat-card chats">
+                            <div class="stat-value chats">${formatNumber(chats.all_time)}</div>
+                            <div class="stat-label">All Time</div>
+                        </div>
                     </div>
                 </div>
                 
                 <div class="chart-container">
-                    <div class="chart-title">📈 Daily Notes Created (Last 30 Days)</div>
+                    <div class="chart-title">📈 Daily Activity (Last 30 Days)</div>
                     <div class="chart">
                         ${chartBars || '<p style="color: var(--text-secondary); text-align: center; width: 100%;">No data yet</p>'}
+                    </div>
+                    <div class="legend">
+                        <div class="legend-item">
+                            <div class="legend-color notes"></div>
+                            <span>Notes</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color chats"></div>
+                            <span>Chats</span>
+                        </div>
                     </div>
                 </div>
                 

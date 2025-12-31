@@ -509,16 +509,43 @@ export class StatsStore {
     this.sql = state.storage.sql;
     
     this.state.blockConcurrencyWhile(async () => {
-      this.sql.exec(`
-        CREATE TABLE IF NOT EXISTS stats (
-          date TEXT PRIMARY KEY,
-          note_count INTEGER NOT NULL DEFAULT 0,
-          chat_count INTEGER NOT NULL DEFAULT 0
-        )
-      `);
+      // Check if old schema exists (with 'count' column)
       try {
-        this.sql.exec(`ALTER TABLE stats ADD COLUMN chat_count INTEGER NOT NULL DEFAULT 0`);
-      } catch (e) {}
+        const tableInfo = this.sql.exec(`PRAGMA table_info(stats)`).toArray();
+        const hasOldCount = tableInfo.some(col => col.name === 'count');
+        const hasNoteCount = tableInfo.some(col => col.name === 'note_count');
+        
+        if (hasOldCount && !hasNoteCount) {
+          // Migrate from old schema to new schema
+          this.sql.exec(`ALTER TABLE stats RENAME COLUMN count TO note_count`);
+          try {
+            this.sql.exec(`ALTER TABLE stats ADD COLUMN chat_count INTEGER NOT NULL DEFAULT 0`);
+          } catch (e) {}
+        } else if (!hasNoteCount) {
+          // Fresh install - create new schema
+          this.sql.exec(`
+            CREATE TABLE IF NOT EXISTS stats (
+              date TEXT PRIMARY KEY,
+              note_count INTEGER NOT NULL DEFAULT 0,
+              chat_count INTEGER NOT NULL DEFAULT 0
+            )
+          `);
+        } else {
+          // Already migrated, just ensure chat_count exists
+          try {
+            this.sql.exec(`ALTER TABLE stats ADD COLUMN chat_count INTEGER NOT NULL DEFAULT 0`);
+          } catch (e) {}
+        }
+      } catch (e) {
+        // Table doesn't exist, create it fresh
+        this.sql.exec(`
+          CREATE TABLE IF NOT EXISTS stats (
+            date TEXT PRIMARY KEY,
+            note_count INTEGER NOT NULL DEFAULT 0,
+            chat_count INTEGER NOT NULL DEFAULT 0
+          )
+        `);
+      }
     });
   }
 
