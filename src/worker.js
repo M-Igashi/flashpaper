@@ -419,16 +419,17 @@ const HTML_CONTENT = `<!DOCTYPE html>
         <div class="info">
             <h3>🔒 How it works</h3>
             <ul>
-                <li>Your note is encrypted in your browser before being sent</li>
-                <li>The encryption key is in the URL fragment (never sent to server)</li>
-                <li>Notes auto-expire and are permanently deleted</li>
-                <li>Once viewed, the note is immediately destroyed</li>
+                <li>Your note is encrypted in your browser before being sent.</li>
+                <li>The encryption key is in the URL fragment. (never sent to server)</li>
+                <li>Notes auto-expire and are permanently deleted.</li>
+                <li>Once viewed, the note is immediately destroyed.</li>
+                 <li>No cookies, trackers, ads. Never fuck your privacy.</li>
             </ul>
         </div>
     </div>
     
     <footer>
-        Powered by <a href="https://workers.cloudflare.com" target="_blank">Cloudflare Workers</a> + Durable Objects • <a href="https://github.com/M-Igashi/flashpaper" target="_blank">GitHub</a>
+        Powered by <a href="https://workers.cloudflare.com" target="_blank">Cloudflare Workers</a> + <a href="https://developers.cloudflare.com/durable-objects/">Durable Objects</a> •Source code <a href="https://github.com/M-Igashi/flashpaper" target="_blank">GitHub</a>
     </footer>
 
     <script>
