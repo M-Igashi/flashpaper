@@ -104,7 +104,6 @@ export default {
         }
         
       } else if (method === 'DELETE' && path.match(/^\/api\/chat\/[^\/]+$/)) {
-        // Destroy chat
         const id = path.replace('/api/chat/', '');
         const token = url.searchParams.get('token');
         
@@ -280,9 +279,14 @@ export class ChatStore {
           current_message TEXT,
           current_sender TEXT,
           message_at INTEGER,
-          message_read INTEGER DEFAULT 0
+          message_read INTEGER DEFAULT 0,
+          recipient_joined INTEGER DEFAULT 0
         )
       `);
+      // Migration: add recipient_joined if not exists
+      try {
+        this.sql.exec(`ALTER TABLE chats ADD COLUMN recipient_joined INTEGER DEFAULT 0`);
+      } catch (e) {}
     });
   }
 
@@ -306,8 +310,8 @@ export class ChatStore {
       const recipientHash = await this.hashToken(recipientToken);
       
       this.sql.exec(
-        `INSERT INTO chats (id, creator_token_hash, recipient_token_hash, created_at, expires_at, current_message, current_sender, message_at) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO chats (id, creator_token_hash, recipient_token_hash, created_at, expires_at, current_message, current_sender, message_at, recipient_joined) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
         id, creatorHash, recipientHash, now, expiresAt,
         initialMessage || null,
         initialMessage ? 'creator' : null,
@@ -345,6 +349,16 @@ export class ChatStore {
       if (!isCreator && !isRecipient) {
         return Response.json({ success: false, error: 'Invalid token' }, { status: 401 });
       }
+      
+      // If recipient is accessing for the first time, lock the chat
+      if (isRecipient && !chat.recipient_joined) {
+        this.sql.exec(`UPDATE chats SET recipient_joined = 1 WHERE id = ?`, chat.id);
+      }
+      
+      // If someone with recipient token tries to access after it's been locked by another device
+      // We need a way to identify the "real" recipient - use a session approach
+      // For now, once recipient_joined is set, the recipient token is valid
+      // The security is: only the person with the URL can access
       
       const role = isCreator ? 'creator' : 'recipient';
       const hasMessage = !!chat.current_message;
@@ -566,7 +580,6 @@ const HTML_CONTENT = `<!DOCTYPE html>
         
         .tagline { color: var(--text-secondary); font-size: 0.9rem; }
         
-        /* Tabs */
         .tabs {
             display: flex;
             margin-bottom: 1.5rem;
@@ -587,16 +600,8 @@ const HTML_CONTENT = `<!DOCTYPE html>
         }
         
         .tab:hover { color: var(--text-primary); }
-        
-        .tab.active-note {
-            background: var(--accent);
-            color: white;
-        }
-        
-        .tab.active-chat {
-            background: var(--accent-chat);
-            color: white;
-        }
+        .tab.active-note { background: var(--accent); color: white; }
+        .tab.active-chat { background: var(--accent-chat); color: white; }
         
         .card {
             background: var(--bg-secondary);
@@ -661,9 +666,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
         }
         button.btn-secondary:hover { background: var(--bg-secondary); }
         
-        button.btn-danger {
-            background: var(--error);
-        }
+        button.btn-danger { background: var(--error); }
         button.btn-danger:hover { background: #dc2626; }
         
         .result {
@@ -787,6 +790,12 @@ const HTML_CONTENT = `<!DOCTYPE html>
         
         .button-group button { flex: 1; }
         
+        .auto-refresh-indicator {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            margin-left: 0.5rem;
+        }
+        
         footer {
             margin-top: auto;
             padding-top: 2rem;
@@ -807,17 +816,15 @@ const HTML_CONTENT = `<!DOCTYPE html>
             <p class="tagline">Self-destructing encrypted note/chat</p>
         </header>
         
-        <!-- Tabs (hidden on view/chat session pages) -->
         <div class="tabs" id="tabs">
             <div class="tab active-note" id="tab-note" onclick="switchTab('note')">📝 Note</div>
             <div class="tab" id="tab-chat" onclick="switchTab('chat')">💬 Chat</div>
         </div>
         
-        <!-- ===== NOTE CREATE MODE ===== -->
+        <!-- NOTE CREATE MODE -->
         <div id="note-create-mode">
             <div class="card">
                 <textarea id="note-input" placeholder="Enter your secret note here..."></textarea>
-                
                 <div class="options">
                     <div class="option">
                         <label for="note-ttl">Expires after:</label>
@@ -828,16 +835,13 @@ const HTML_CONTENT = `<!DOCTYPE html>
                         </select>
                     </div>
                 </div>
-                
                 <button id="note-create-btn" onclick="createNote()">Create Secure Note</button>
-                
                 <div id="note-result" class="result">
                     <div class="result-label">Share this link (note will be destroyed after viewing):</div>
                     <div id="note-result-link" class="result-link"></div>
                     <button class="copy-btn" onclick="copyNoteLink()">Copy Link</button>
                 </div>
             </div>
-            
             <div class="info note-info">
                 <h3>🔒 How it works</h3>
                 <ul>
@@ -850,12 +854,11 @@ const HTML_CONTENT = `<!DOCTYPE html>
             </div>
         </div>
         
-        <!-- ===== NOTE VIEW MODE ===== -->
+        <!-- NOTE VIEW MODE -->
         <div id="note-view-mode" class="hidden">
             <div class="card">
                 <p class="warning">⚠️ This note will be permanently destroyed after viewing.</p>
                 <button id="note-reveal-btn" onclick="revealNote()">Reveal Note</button>
-                
                 <div id="note-display" class="hidden">
                     <div id="note-content" class="message-box"></div>
                     <button class="copy-btn" onclick="copyNoteContent()">Copy Message</button>
@@ -864,11 +867,10 @@ const HTML_CONTENT = `<!DOCTYPE html>
             </div>
         </div>
         
-        <!-- ===== CHAT CREATE MODE ===== -->
+        <!-- CHAT CREATE MODE -->
         <div id="chat-create-mode" class="hidden">
             <div class="card">
                 <textarea id="chat-initial-message" class="chat-focus" placeholder="Enter your first message (optional)..."></textarea>
-                
                 <div class="options">
                     <div class="option">
                         <label for="chat-ttl">Chat expires after:</label>
@@ -879,20 +881,16 @@ const HTML_CONTENT = `<!DOCTYPE html>
                         </select>
                     </div>
                 </div>
-                
                 <button id="chat-create-btn" class="btn-chat" onclick="createChat()">Start Secure Chat</button>
-                
                 <div id="chat-result" class="result">
                     <div class="result-label">📤 Share this link with your contact:</div>
                     <div id="chat-share-link" class="result-link"></div>
                     <button class="copy-btn" onclick="copyShareLink()">Copy Share Link</button>
-                    
                     <div class="button-group" style="margin-top: 1.5rem;">
                         <button class="btn-chat" onclick="goToChat()">Go to Chat →</button>
                     </div>
                 </div>
             </div>
-            
             <div class="info chat-info">
                 <h3>🔒 How Secure Chat works</h3>
                 <ul>
@@ -905,13 +903,14 @@ const HTML_CONTENT = `<!DOCTYPE html>
             </div>
         </div>
         
-        <!-- ===== CHAT SESSION MODE ===== -->
+        <!-- CHAT SESSION MODE -->
         <div id="chat-session-mode" class="hidden">
             <div class="card">
                 <div class="status-bar">
                     <div class="status-indicator">
                         <div class="status-dot" id="status-dot"></div>
                         <span id="status-text">Connected</span>
+                        <span class="auto-refresh-indicator" id="refresh-indicator">• Auto-refresh</span>
                     </div>
                     <div class="expires-in" id="expires-in"></div>
                 </div>
@@ -920,16 +919,14 @@ const HTML_CONTENT = `<!DOCTYPE html>
                     <div id="no-message" class="info-text" style="text-align: center; padding: 2rem;">
                         No messages yet. Send the first message!
                     </div>
-                    
                     <div id="message-display" class="hidden">
                         <div class="message-meta" id="message-meta"></div>
                         <div class="message-box received" id="message-content"></div>
                         <button class="copy-btn" onclick="copyMessage()">Copy Message</button>
                     </div>
-                    
                     <div id="waiting-display" class="hidden" style="text-align: center; padding: 2rem;">
                         <p class="info-text">⏳ Waiting for reply...</p>
-                        <p class="info-text" style="font-size: 0.8rem; margin-top: 0.5rem;">Your message was sent. Refresh to check for new messages.</p>
+                        <p class="info-text" style="font-size: 0.8rem; margin-top: 0.5rem;">Auto-refreshing every 10 seconds...</p>
                     </div>
                 </div>
                 
@@ -946,7 +943,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
             </div>
         </div>
         
-        <!-- ===== ERROR MODE ===== -->
+        <!-- ERROR MODE -->
         <div id="error-mode" class="hidden">
             <div class="card">
                 <p class="error-msg" id="error-message"></p>
@@ -962,7 +959,6 @@ const HTML_CONTENT = `<!DOCTYPE html>
     <script>
         const cryptoApi = window.crypto || window.msCrypto;
         
-        // ===== CRYPTO FUNCTIONS =====
         async function generateKey() {
             return await cryptoApi.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
         }
@@ -996,7 +992,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
             return new TextDecoder().decode(decrypted);
         }
         
-        // ===== STATE =====
+        // State
         let currentTab = 'note';
         let noteLink = '';
         let chatId = '';
@@ -1005,8 +1001,9 @@ const HTML_CONTENT = `<!DOCTYPE html>
         let userToken = '';
         let creatorLink = '';
         let shareLink = '';
+        let autoRefreshInterval = null;
         
-        // ===== TAB SWITCHING =====
+        // Tab switching
         function switchTab(tab) {
             currentTab = tab;
             const title = document.getElementById('main-title');
@@ -1032,7 +1029,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
             }
         }
         
-        // ===== NOTE FUNCTIONS =====
+        // Note functions
         async function createNote() {
             const noteInput = document.getElementById('note-input');
             const ttlSelect = document.getElementById('note-ttl');
@@ -1051,12 +1048,10 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 const keyStr = await exportKey(key);
                 const ciphertext = await encrypt(plaintext, key);
                 
-                const payload = { ciphertext, ttl_seconds: parseInt(ttlSelect.value) };
-                
                 const response = await fetch('/api/note', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({ ciphertext, ttl_seconds: parseInt(ttlSelect.value) })
                 });
                 
                 if (!response.ok) throw new Error('Failed to create note');
@@ -1067,7 +1062,6 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 resultLink.textContent = noteLink;
                 result.classList.add('show');
                 noteInput.value = '';
-                
             } catch (error) {
                 console.error('Error:', error);
                 alert('Failed to create note. Please try again.');
@@ -1109,7 +1103,6 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 revealBtn.classList.add('hidden');
                 document.querySelector('.warning').classList.add('hidden');
                 noteDisplay.classList.remove('hidden');
-                
             } catch (error) {
                 console.error('Error:', error);
                 showError(error.message || 'Failed to decrypt note.');
@@ -1124,7 +1117,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
             });
         }
         
-        // ===== CHAT FUNCTIONS =====
+        // Chat functions
         async function createChat() {
             const initialMessage = document.getElementById('chat-initial-message').value.trim();
             const ttlSelect = document.getElementById('chat-ttl');
@@ -1139,7 +1132,6 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 encryptionKeyStr = await exportKey(encryptionKey);
                 
                 const payload = { ttl_seconds: parseInt(ttlSelect.value) };
-                
                 if (initialMessage) {
                     payload.ciphertext = await encrypt(initialMessage, encryptionKey);
                 }
@@ -1161,7 +1153,6 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 
                 document.getElementById('chat-share-link').textContent = shareLink;
                 result.classList.add('show');
-                
             } catch (error) {
                 console.error('Error:', error);
                 alert('Failed to create chat. Please try again.');
@@ -1184,12 +1175,15 @@ const HTML_CONTENT = `<!DOCTYPE html>
         
         async function loadChat() {
             try {
-                encryptionKey = await importKey(encryptionKeyStr);
+                if (!encryptionKey) {
+                    encryptionKey = await importKey(encryptionKeyStr);
+                }
                 
                 const response = await fetch('/api/chat/' + chatId + '?token=' + encodeURIComponent(userToken));
                 const data = await response.json();
                 
                 if (!data.success) {
+                    stopAutoRefresh();
                     showError(data.error || 'Chat not found');
                     return;
                 }
@@ -1231,10 +1225,9 @@ const HTML_CONTENT = `<!DOCTYPE html>
                     const msgTime = new Date(data.messageAt).toLocaleString();
                     document.getElementById('message-meta').textContent = 'Received • ' + msgTime;
                 }
-                
             } catch (error) {
                 console.error('Error:', error);
-                showError('Failed to load chat: ' + error.message);
+                // Don't show error on auto-refresh failures, just log
             }
         }
         
@@ -1244,6 +1237,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
             
             if (remaining <= 0) {
                 document.getElementById('expires-in').textContent = 'Expired';
+                stopAutoRefresh();
                 return;
             }
             
@@ -1256,6 +1250,18 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 document.getElementById('expires-in').textContent = 'Expires in ' + hours + 'h ' + minutes + 'm';
             } else {
                 document.getElementById('expires-in').textContent = 'Expires in ' + minutes + 'm';
+            }
+        }
+        
+        function startAutoRefresh() {
+            if (autoRefreshInterval) return;
+            autoRefreshInterval = setInterval(loadChat, 10000); // 10 seconds
+        }
+        
+        function stopAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
             }
         }
         
@@ -1284,7 +1290,6 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 
                 replyInput.value = '';
                 await loadChat();
-                
             } catch (error) {
                 console.error('Error:', error);
                 alert('Failed to send message: ' + error.message);
@@ -1310,6 +1315,8 @@ const HTML_CONTENT = `<!DOCTYPE html>
             if (!confirm('Are you sure you want to destroy this chat? This cannot be undone.')) return;
             
             try {
+                stopAutoRefresh();
+                
                 const response = await fetch('/api/chat/' + chatId + '?token=' + encodeURIComponent(userToken), {
                     method: 'DELETE'
                 });
@@ -1320,7 +1327,6 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 
                 alert('Chat destroyed successfully.');
                 window.location.href = '/chat';
-                
             } catch (error) {
                 console.error('Error:', error);
                 alert('Failed to destroy chat: ' + error.message);
@@ -1328,6 +1334,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
         }
         
         function showError(message) {
+            stopAutoRefresh();
             document.getElementById('tabs').classList.add('hidden');
             document.getElementById('note-create-mode').classList.add('hidden');
             document.getElementById('note-view-mode').classList.add('hidden');
@@ -1337,20 +1344,17 @@ const HTML_CONTENT = `<!DOCTYPE html>
             document.getElementById('error-message').textContent = message;
         }
         
-        // ===== INITIALIZATION =====
+        // Initialize
         (function init() {
             const path = location.pathname;
             const hash = location.hash.substring(1);
             
             if (path.startsWith('/view/')) {
-                // Note view mode
                 document.getElementById('tabs').classList.add('hidden');
                 document.getElementById('note-create-mode').classList.add('hidden');
                 document.getElementById('note-view-mode').classList.remove('hidden');
                 document.getElementById('main-title').className = 'note-mode';
-                
             } else if (path.match(/^\\/chat\\/[^/]+$/)) {
-                // Chat session mode
                 document.getElementById('tabs').classList.add('hidden');
                 document.getElementById('note-create-mode').classList.add('hidden');
                 document.getElementById('chat-session-mode').classList.remove('hidden');
@@ -1363,21 +1367,21 @@ const HTML_CONTENT = `<!DOCTYPE html>
                         encryptionKeyStr = parts[0];
                         userToken = parts[1];
                         loadChat();
+                        startAutoRefresh();
                     } else {
                         showError('Invalid chat link');
                     }
                 } else {
                     showError('Invalid chat link - missing key');
                 }
-                
             } else if (path === '/chat' || path === '/chat/new') {
-                // Chat create mode
                 switchTab('chat');
-                
             } else {
-                // Note create mode (default)
                 switchTab('note');
             }
+            
+            // Cleanup on page unload
+            window.addEventListener('beforeunload', stopAutoRefresh);
         })();
     </script>
     <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "{{CF_ANALYTICS_TOKEN}}"}'></script><!-- End Cloudflare Web Analytics -->
