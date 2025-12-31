@@ -38,7 +38,16 @@ export default {
         response = await stub.fetch(new Request('https://do/retrieve'));
         
       } else if (method === 'GET' && (path === '/' || path === '/index.html' || path.startsWith('/view/'))) {
-        return new Response(HTML_CONTENT, {
+        // Inject analytics token if configured
+        const analyticsToken = env.CF_ANALYTICS_TOKEN || '';
+        let html = HTML_CONTENT;
+        if (analyticsToken) {
+          html = html.replace('{{CF_ANALYTICS_TOKEN}}', analyticsToken);
+        } else {
+          // Remove analytics script entirely if no token
+          html = html.replace(/<!-- Cloudflare Web Analytics -->.*<!-- End Cloudflare Web Analytics -->/s, '');
+        }
+        return new Response(html, {
           headers: { 
             'Content-Type': 'text/html; charset=utf-8',
             ...corsHeaders 
@@ -588,6 +597,6 @@ const HTML_CONTENT = `<!DOCTYPE html>
             }
         })();
     </script>
-    <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "3fd36eed6e1942b6acdc6c2021db1b35"}'></script><!-- End Cloudflare Web Analytics -->
+    <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "{{CF_ANALYTICS_TOKEN}}"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>`;

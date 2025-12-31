@@ -14,3 +14,7 @@ new_sqlite_classes = ["NoteStore"]
 # Cron trigger - runs every hour to clean up expired notes
 [triggers]
 crons = ["0 * * * *"]
+
+# Environment variables (set via Cloudflare dashboard or .dev.vars for local)
+[vars]
+CF_ANALYTICS_TOKEN = ""  # Set your Cloudflare Web Analytics token

@@ -89,7 +89,28 @@ new_sqlite_classes = ["NoteStore"]
 # Cron trigger - runs every hour to clean up expired notes
 [triggers]
 crons = ["0 * * * *"]
+
+# Environment variables
+[vars]
+CF_ANALYTICS_TOKEN = ""  # Optional: Cloudflare Web Analytics token
 ```
+
+### Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `CF_ANALYTICS_TOKEN` | Cloudflare Web Analytics token | No |
+
+**Setting environment variables:**
+
+1. **Via Cloudflare Dashboard**: Workers & Pages → Your Worker → Settings → Variables
+2. **Via wrangler.toml**: Add to `[vars]` section (not recommended for secrets)
+3. **Via .dev.vars** (local development only):
+   ```
+   CF_ANALYTICS_TOKEN=your-token-here
+   ```
+
+If `CF_ANALYTICS_TOKEN` is not set, the analytics script is automatically removed from the page.
 
 ## API
 
