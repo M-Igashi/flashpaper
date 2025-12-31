@@ -428,7 +428,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
     </div>
     
     <footer>
-        Powered by <a href="https://workers.cloudflare.com" target="_blank">Cloudflare Workers</a> + Durable Objects
+        Powered by <a href="https://workers.cloudflare.com" target="_blank">Cloudflare Workers</a> + Durable Objects • <a href="https://github.com/M-Igashi/flashpaper" target="_blank">GitHub</a>
     </footer>
 
     <script>
