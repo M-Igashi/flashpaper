@@ -588,5 +588,6 @@ const HTML_CONTENT = `<!DOCTYPE html>
             }
         })();
     </script>
+    <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "3fd36eed6e1942b6acdc6c2021db1b35"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>`;
