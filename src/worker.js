@@ -60,6 +60,7 @@ export default {
             id,
             creatorToken,
             recipientToken,
+            creatorSessionId: body.sessionId,
             ttl_seconds: body.ttl_seconds,
             initialMessage: body.ciphertext
           }),
@@ -74,14 +75,17 @@ export default {
       } else if (method === 'GET' && path.match(/^\/api\/chat\/[^\/]+$/)) {
         const id = path.replace('/api/chat/', '');
         const token = url.searchParams.get('token');
+        const sessionId = url.searchParams.get('sessionId');
         
         if (!token) {
           response = Response.json({ success: false, error: 'Token required' }, { status: 401 });
+        } else if (!sessionId) {
+          response = Response.json({ success: false, error: 'Session ID required' }, { status: 401 });
         } else {
           const namespace = env.CHAT_STORE;
           const stub = namespace.get(namespace.idFromName(id));
           
-          response = await stub.fetch(new Request('https://do/get?token=' + encodeURIComponent(token)));
+          response = await stub.fetch(new Request('https://do/get?token=' + encodeURIComponent(token) + '&sessionId=' + encodeURIComponent(sessionId)));
         }
         
       } else if (method === 'POST' && path.match(/^\/api\/chat\/[^\/]+\/message$/)) {
@@ -90,6 +94,8 @@ export default {
         
         if (!body.token) {
           response = Response.json({ success: false, error: 'Token required' }, { status: 401 });
+        } else if (!body.sessionId) {
+          response = Response.json({ success: false, error: 'Session ID required' }, { status: 401 });
         } else {
           const namespace = env.CHAT_STORE;
           const stub = namespace.get(namespace.idFromName(id));
@@ -98,6 +104,7 @@ export default {
             method: 'POST',
             body: JSON.stringify({
               token: body.token,
+              sessionId: body.sessionId,
               ciphertext: body.ciphertext
             }),
           }));
@@ -106,6 +113,7 @@ export default {
       } else if (method === 'DELETE' && path.match(/^\/api\/chat\/[^\/]+$/)) {
         const id = path.replace('/api/chat/', '');
         const token = url.searchParams.get('token');
+        const sessionId = url.searchParams.get('sessionId');
         
         if (!token) {
           response = Response.json({ success: false, error: 'Token required' }, { status: 401 });
@@ -113,7 +121,7 @@ export default {
           const namespace = env.CHAT_STORE;
           const stub = namespace.get(namespace.idFromName(id));
           
-          response = await stub.fetch(new Request('https://do/destroy?token=' + encodeURIComponent(token), {
+          response = await stub.fetch(new Request('https://do/destroy?token=' + encodeURIComponent(token) + '&sessionId=' + encodeURIComponent(sessionId || ''), {
             method: 'DELETE'
           }));
         }
@@ -274,19 +282,19 @@ export class ChatStore {
           id TEXT PRIMARY KEY,
           creator_token_hash TEXT NOT NULL,
           recipient_token_hash TEXT NOT NULL,
+          creator_session_hash TEXT,
+          recipient_session_hash TEXT,
           created_at INTEGER NOT NULL,
           expires_at INTEGER NOT NULL,
           current_message TEXT,
           current_sender TEXT,
           message_at INTEGER,
-          message_read INTEGER DEFAULT 0,
-          recipient_joined INTEGER DEFAULT 0
+          message_read INTEGER DEFAULT 0
         )
       `);
-      // Migration: add recipient_joined if not exists
-      try {
-        this.sql.exec(`ALTER TABLE chats ADD COLUMN recipient_joined INTEGER DEFAULT 0`);
-      } catch (e) {}
+      // Migration
+      try { this.sql.exec(`ALTER TABLE chats ADD COLUMN creator_session_hash TEXT`); } catch (e) {}
+      try { this.sql.exec(`ALTER TABLE chats ADD COLUMN recipient_session_hash TEXT`); } catch (e) {}
     });
   }
 
@@ -298,7 +306,7 @@ export class ChatStore {
 
     if (path === '/create') {
       const body = await request.json();
-      const { id, creatorToken, recipientToken, ttl_seconds, initialMessage } = body;
+      const { id, creatorToken, recipientToken, creatorSessionId, ttl_seconds, initialMessage } = body;
       
       const now = Date.now();
       const defaultTTL = 24 * 60 * 60 * 1000;
@@ -308,11 +316,12 @@ export class ChatStore {
       
       const creatorHash = await this.hashToken(creatorToken);
       const recipientHash = await this.hashToken(recipientToken);
+      const creatorSessionHash = creatorSessionId ? await this.hashToken(creatorSessionId) : null;
       
       this.sql.exec(
-        `INSERT INTO chats (id, creator_token_hash, recipient_token_hash, created_at, expires_at, current_message, current_sender, message_at, recipient_joined) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
-        id, creatorHash, recipientHash, now, expiresAt,
+        `INSERT INTO chats (id, creator_token_hash, recipient_token_hash, creator_session_hash, recipient_session_hash, created_at, expires_at, current_message, current_sender, message_at) 
+         VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)`,
+        id, creatorHash, recipientHash, creatorSessionHash, now, expiresAt,
         initialMessage || null,
         initialMessage ? 'creator' : null,
         initialMessage ? now : null
@@ -328,7 +337,9 @@ export class ChatStore {
       
     } else if (path === '/get') {
       const token = url.searchParams.get('token');
+      const sessionId = url.searchParams.get('sessionId');
       const tokenHash = await this.hashToken(token);
+      const sessionHash = await this.hashToken(sessionId);
       
       const rows = this.sql.exec(`SELECT * FROM chats LIMIT 1`).toArray();
       
@@ -350,15 +361,25 @@ export class ChatStore {
         return Response.json({ success: false, error: 'Invalid token' }, { status: 401 });
       }
       
-      // If recipient is accessing for the first time, lock the chat
-      if (isRecipient && !chat.recipient_joined) {
-        this.sql.exec(`UPDATE chats SET recipient_joined = 1 WHERE id = ?`, chat.id);
+      // Session binding check
+      if (isCreator) {
+        if (chat.creator_session_hash && chat.creator_session_hash !== sessionHash) {
+          return Response.json({ success: false, error: 'Session mismatch - this chat is bound to another browser' }, { status: 403 });
+        }
+        // Bind session if not yet bound
+        if (!chat.creator_session_hash) {
+          this.sql.exec(`UPDATE chats SET creator_session_hash = ? WHERE id = ?`, sessionHash, chat.id);
+        }
+      } else {
+        // Recipient
+        if (chat.recipient_session_hash && chat.recipient_session_hash !== sessionHash) {
+          return Response.json({ success: false, error: 'Session mismatch - this chat is bound to another browser' }, { status: 403 });
+        }
+        // Bind session if not yet bound (first access)
+        if (!chat.recipient_session_hash) {
+          this.sql.exec(`UPDATE chats SET recipient_session_hash = ? WHERE id = ?`, sessionHash, chat.id);
+        }
       }
-      
-      // If someone with recipient token tries to access after it's been locked by another device
-      // We need a way to identify the "real" recipient - use a session approach
-      // For now, once recipient_joined is set, the recipient token is valid
-      // The security is: only the person with the URL can access
       
       const role = isCreator ? 'creator' : 'recipient';
       const hasMessage = !!chat.current_message;
@@ -381,8 +402,9 @@ export class ChatStore {
       
     } else if (path === '/message') {
       const body = await request.json();
-      const { token, ciphertext } = body;
+      const { token, sessionId, ciphertext } = body;
       const tokenHash = await this.hashToken(token);
+      const sessionHash = await this.hashToken(sessionId);
       
       const rows = this.sql.exec(`SELECT * FROM chats LIMIT 1`).toArray();
       
@@ -404,6 +426,14 @@ export class ChatStore {
         return Response.json({ success: false, error: 'Invalid token' }, { status: 401 });
       }
       
+      // Session binding check
+      if (isCreator && chat.creator_session_hash && chat.creator_session_hash !== sessionHash) {
+        return Response.json({ success: false, error: 'Session mismatch' }, { status: 403 });
+      }
+      if (isRecipient && chat.recipient_session_hash && chat.recipient_session_hash !== sessionHash) {
+        return Response.json({ success: false, error: 'Session mismatch' }, { status: 403 });
+      }
+      
       const role = isCreator ? 'creator' : 'recipient';
       const now = Date.now();
       
@@ -416,7 +446,9 @@ export class ChatStore {
       
     } else if (path === '/destroy') {
       const token = url.searchParams.get('token');
+      const sessionId = url.searchParams.get('sessionId');
       const tokenHash = await this.hashToken(token);
+      const sessionHash = sessionId ? await this.hashToken(sessionId) : null;
       
       const rows = this.sql.exec(`SELECT * FROM chats LIMIT 1`).toArray();
       
@@ -433,6 +465,16 @@ export class ChatStore {
         return Response.json({ success: false, error: 'Invalid token' }, { status: 401 });
       }
       
+      // Session check for destroy (if session exists)
+      if (sessionHash) {
+        if (isCreator && chat.creator_session_hash && chat.creator_session_hash !== sessionHash) {
+          return Response.json({ success: false, error: 'Session mismatch' }, { status: 403 });
+        }
+        if (isRecipient && chat.recipient_session_hash && chat.recipient_session_hash !== sessionHash) {
+          return Response.json({ success: false, error: 'Session mismatch' }, { status: 403 });
+        }
+      }
+      
       this.sql.exec(`DELETE FROM chats WHERE id = ?`, chat.id);
       
       return Response.json({ success: true, message: 'Chat destroyed' });
@@ -447,6 +489,7 @@ export class ChatStore {
   }
 
   async hashToken(token) {
+    if (!token) return null;
     const encoder = new TextEncoder();
     const data = encoder.encode(token);
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
@@ -849,7 +892,6 @@ const HTML_CONTENT = `<!DOCTYPE html>
                     <li>The encryption key is in the URL fragment (never sent to server).</li>
                     <li>Notes auto-expire and are permanently deleted.</li>
                     <li>Once viewed, the note is immediately destroyed.</li>
-                    <li>No cookies, trackers, ads. Never fuck your privacy.</li>
                 </ul>
             </div>
         </div>
@@ -896,9 +938,9 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 <ul>
                     <li>Messages are encrypted in your browser (AES-256-GCM).</li>
                     <li>Only ONE message exists at a time - previous is destroyed on reply.</li>
+                    <li>Chat is bound to the first browser that opens each link.</li>
                     <li>Encryption key stays in URL fragment (never sent to server).</li>
                     <li>Chat auto-expires and is permanently deleted.</li>
-                    <li>No message history, no logs, no traces.</li>
                 </ul>
             </div>
         </div>
@@ -959,6 +1001,23 @@ const HTML_CONTENT = `<!DOCTYPE html>
     <script>
         const cryptoApi = window.crypto || window.msCrypto;
         
+        // Session ID management
+        function getOrCreateSessionId(chatId) {
+            const key = 'flashpaper_session_' + chatId;
+            let sessionId = localStorage.getItem(key);
+            if (!sessionId) {
+                const array = new Uint8Array(32);
+                cryptoApi.getRandomValues(array);
+                sessionId = Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
+                localStorage.setItem(key, sessionId);
+            }
+            return sessionId;
+        }
+        
+        function clearSessionId(chatId) {
+            localStorage.removeItem('flashpaper_session_' + chatId);
+        }
+        
         async function generateKey() {
             return await cryptoApi.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
         }
@@ -999,6 +1058,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
         let encryptionKey = null;
         let encryptionKeyStr = '';
         let userToken = '';
+        let sessionId = '';
         let creatorLink = '';
         let shareLink = '';
         let autoRefreshInterval = null;
@@ -1131,7 +1191,14 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 encryptionKey = await generateKey();
                 encryptionKeyStr = await exportKey(encryptionKey);
                 
-                const payload = { ttl_seconds: parseInt(ttlSelect.value) };
+                // Generate temp chat ID for session
+                const tempChatId = Math.random().toString(36).substring(2);
+                sessionId = getOrCreateSessionId(tempChatId);
+                
+                const payload = { 
+                    ttl_seconds: parseInt(ttlSelect.value),
+                    sessionId: sessionId
+                };
                 if (initialMessage) {
                     payload.ciphertext = await encrypt(initialMessage, encryptionKey);
                 }
@@ -1147,6 +1214,10 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 const data = await response.json();
                 chatId = data.id;
                 userToken = data.creatorToken;
+                
+                // Update session to use real chat ID
+                clearSessionId(tempChatId);
+                localStorage.setItem('flashpaper_session_' + chatId, sessionId);
                 
                 creatorLink = location.origin + '/chat/' + chatId + '#' + encryptionKeyStr + ':' + data.creatorToken;
                 shareLink = location.origin + '/chat/' + chatId + '#' + encryptionKeyStr + ':' + data.recipientToken;
@@ -1179,7 +1250,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
                     encryptionKey = await importKey(encryptionKeyStr);
                 }
                 
-                const response = await fetch('/api/chat/' + chatId + '?token=' + encodeURIComponent(userToken));
+                const response = await fetch('/api/chat/' + chatId + '?token=' + encodeURIComponent(userToken) + '&sessionId=' + encodeURIComponent(sessionId));
                 const data = await response.json();
                 
                 if (!data.success) {
@@ -1227,7 +1298,6 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 }
             } catch (error) {
                 console.error('Error:', error);
-                // Don't show error on auto-refresh failures, just log
             }
         }
         
@@ -1255,7 +1325,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
         
         function startAutoRefresh() {
             if (autoRefreshInterval) return;
-            autoRefreshInterval = setInterval(loadChat, 10000); // 10 seconds
+            autoRefreshInterval = setInterval(loadChat, 10000);
         }
         
         function stopAutoRefresh() {
@@ -1281,7 +1351,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 const response = await fetch('/api/chat/' + chatId + '/message', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ token: userToken, ciphertext })
+                    body: JSON.stringify({ token: userToken, sessionId: sessionId, ciphertext })
                 });
                 
                 const data = await response.json();
@@ -1317,13 +1387,16 @@ const HTML_CONTENT = `<!DOCTYPE html>
             try {
                 stopAutoRefresh();
                 
-                const response = await fetch('/api/chat/' + chatId + '?token=' + encodeURIComponent(userToken), {
+                const response = await fetch('/api/chat/' + chatId + '?token=' + encodeURIComponent(userToken) + '&sessionId=' + encodeURIComponent(sessionId), {
                     method: 'DELETE'
                 });
                 
                 const data = await response.json();
                 
                 if (!data.success) throw new Error(data.error || 'Failed to destroy chat');
+                
+                // Clear session ID
+                clearSessionId(chatId);
                 
                 alert('Chat destroyed successfully.');
                 window.location.href = '/chat';
@@ -1366,6 +1439,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
                     if (parts.length === 2) {
                         encryptionKeyStr = parts[0];
                         userToken = parts[1];
+                        sessionId = getOrCreateSessionId(chatId);
                         loadChat();
                         startAutoRefresh();
                     } else {
@@ -1380,7 +1454,6 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 switchTab('note');
             }
             
-            // Cleanup on page unload
             window.addEventListener('beforeunload', stopAutoRefresh);
         })();
     </script>

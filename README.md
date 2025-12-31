@@ -1,61 +1,90 @@
-# 🔥 Flashpaper
+# Flashpaper 🔥📝
 
-> "This message will self-destruct..."
+Self-destructing encrypted notes and chats. A privacy-focused alternative to Privnote.
 
-A privacy-first, self-destructing encrypted notes service built on Cloudflare Workers + Durable Objects with SQLite storage.
-
-## 🚀 Live Demo
-
-**https://flashpaper.ravers.workers.dev**
-
-Feel free to use it! It's free and open for everyone.
+**Live Demo:** [flashpaper.ravers.workers.dev](https://flashpaper.ravers.workers.dev/)
 
 ## Features
 
-- 🔐 **End-to-end encryption** - AES-256-GCM encryption in your browser; decryption key never leaves your device (stored in URL fragment)
-- 🔥 **One-time read** - Notes are permanently deleted immediately after viewing
-- ⏰ **Auto-expiry** - Notes auto-expire after 1 hour, 24 hours, or 7 days (configurable)
-- 🧹 **Automatic cleanup** - Cron job runs hourly to purge expired notes
-- 🌐 **Zero-knowledge** - Server only stores encrypted blobs; it cannot read your messages
+### 📝 Notes
+- **One-time read** - Notes are permanently destroyed after viewing
+- **Client-side encryption** - AES-256-GCM encryption in your browser
+- **Zero-knowledge** - Server never sees plaintext content
+- **Auto-expiry** - Notes auto-delete after 1 hour, 24 hours, or 7 days
 
-## How It Works
-
-1. **Create**: Enter your secret message → encrypted in your browser with AES-256-GCM
-2. **Store**: Only the encrypted blob is sent to the server (key stays in your browser)
-3. **Share**: You get a URL like `https://flashpaper.ravers.workers.dev/view/abc123#SECRET_KEY`
-4. **Read**: Recipient opens the link → server returns & deletes the encrypted note → browser decrypts with the key from URL fragment
-5. **Gone**: The note is permanently destroyed
+### 💬 Secure Chat
+- **Ephemeral messaging** - Only ONE message exists at a time (previous destroyed on reply)
+- **Browser-bound sessions** - Chat locked to first browser that opens each link
+- **Dual authentication** - Separate URLs for creator and recipient
+- **Manual destruction** - Either party can destroy chat at any time
+- **Auto-refresh** - Checks for new messages every 10 seconds
 
 ## Privacy Model
 
-| Data | Stored on Server? | Encrypted? |
-|------|-------------------|------------|
-| Note content | Encrypted blob only | ✅ AES-256-GCM |
-| Decryption key | ❌ Never | N/A (URL fragment) |
-| Access logs | Cloudflare standard | N/A |
+### Notes
+| What | Where | Security |
+|------|-------|----------|
+| Encrypted content | Server (Durable Objects) | AES-256-GCM encrypted |
+| Encryption key | URL fragment only | Never sent to server |
+| Note ID | URL path | Random, unguessable |
 
-The URL fragment (`#key`) is never sent to the server per HTTP specification, so only the recipient with the full URL can decrypt the message.
+### Chat
+| What | Where | Security |
+|------|-------|----------|
+| Encrypted messages | Server (Durable Objects) | AES-256-GCM encrypted |
+| Encryption key | URL fragment only | Never sent to server |
+| Access tokens | URL fragment | SHA-256 hashed before storage |
+| Session IDs | localStorage + Server | SHA-256 hashed, bound on first access |
 
-## Tech Stack
+### Session Binding (Chat)
+Each chat URL can only be used from the **first browser that opens it**:
 
-- **Runtime**: Cloudflare Workers
-- **Storage**: Durable Objects with SQLite
-- **Encryption**: Web Crypto API (AES-256-GCM)
-- **Cleanup**: Cron Triggers (hourly)
+1. When you create a chat, your browser generates a unique session ID stored in localStorage
+2. This session ID is hashed and bound to your role (creator) on the server
+3. When you share the link, the recipient's browser generates its own session ID
+4. The recipient's session is bound on their first access
+5. Any subsequent access attempt from a different browser is **rejected**
+
+This prevents:
+- Link interception attacks (MITM cannot use stolen links)
+- Unauthorized access even with the correct URL
+- Session hijacking
+
+### What We Store (Temporarily)
+- Encrypted ciphertext (unreadable without URL fragment key)
+- Token hashes (SHA-256, cannot reverse to original tokens)
+- Session ID hashes (SHA-256, bound on first access)
+- Creation/expiry timestamps
+- Message read status (for chat)
+
+### What We Never Store
+- Plaintext content
+- Encryption keys
+- Original tokens or session IDs
+- IP addresses
+- User identifiers
+- Browsing history
+
+## Technical Stack
+
+- **Runtime:** Cloudflare Workers (edge computing)
+- **Storage:** Durable Objects with SQLite
+- **Encryption:** Web Crypto API (AES-256-GCM)
+- **Authentication:** URL-embedded tokens + browser session binding
+- **Cleanup:** Hourly cron job for expired content
 
 ## Self-Hosting
 
 ### Prerequisites
-
-- Cloudflare account (free tier works!)
-- Node.js & npm
+- Cloudflare account with Workers Paid plan (for Durable Objects)
+- Node.js and npm
 - Wrangler CLI
 
 ### Deploy
 
 ```bash
 # Clone the repository
-git clone https://github.com/ravers-dev/flashpaper.git
+git clone https://github.com/M-Igashi/flashpaper.git
 cd flashpaper
 
 # Install dependencies
@@ -73,82 +102,101 @@ npx wrangler deploy
 Edit `wrangler.toml` to customize:
 
 ```toml
-name = "flashpaper"
-main = "src/worker.js"
-compatibility_date = "2024-12-01"
+name = "flashpaper"           # Worker name
+main = "src/worker.js"        # Entry point
 
-[durable_objects]
-bindings = [
-  { name = "NOTE_STORE", class_name = "NoteStore" }
-]
-
-[[migrations]]
-tag = "v1"
-new_sqlite_classes = ["NoteStore"]
-
-# Cron trigger - runs every hour to clean up expired notes
-[triggers]
-crons = ["0 * * * *"]
-
-# Environment variables
 [vars]
-CF_ANALYTICS_TOKEN = ""  # Optional: Cloudflare Web Analytics token
+CF_ANALYTICS_TOKEN = ""       # Optional: Cloudflare Analytics
+
+[[durable_objects.bindings]]
+name = "NOTE_STORE"
+class_name = "NoteStore"
+
+[[durable_objects.bindings]]
+name = "CHAT_STORE"
+class_name = "ChatStore"
+
+[[durable_objects.bindings]]
+name = "STATS_STORE"
+class_name = "StatsStore"
+
+[triggers]
+crons = ["0 * * * *"]         # Cleanup every hour
 ```
 
-### Environment Variables
+## API Reference
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `CF_ANALYTICS_TOKEN` | Cloudflare Web Analytics token | No |
+### Notes
 
-**Setting environment variables:**
-
-1. **Via Cloudflare Dashboard**: Workers & Pages → Your Worker → Settings → Variables
-2. **Via wrangler.toml**: Add to `[vars]` section (not recommended for secrets)
-3. **Via .dev.vars** (local development only):
-   ```
-   CF_ANALYTICS_TOKEN=your-token-here
-   ```
-
-If `CF_ANALYTICS_TOKEN` is not set, the analytics script is automatically removed from the page.
-
-## API
-
-### Create a note
-
-```bash
+```
 POST /api/note
-Content-Type: application/json
+  Body: { ciphertext: string, ttl_seconds?: number }
+  Returns: { id: string }
 
-{
-  "ciphertext": "base64-encoded-encrypted-data",
-  "ttl_seconds": 86400  # optional, defaults to 7 days max
-}
-
-# Response
-{
-  "id": "abc123xyz"
-}
+GET /api/note/:id
+  Returns: { success: boolean, ciphertext?: string, error?: string }
 ```
 
-### Retrieve a note (one-time)
+### Chat
 
-```bash
-GET /api/note/{id}
-
-# Response (success)
-{
-  "success": true,
-  "ciphertext": "base64-encoded-encrypted-data"
-}
-
-# Response (not found or already read)
-{
-  "success": false,
-  "error": "Note not found or already read"
-}
 ```
+POST /api/chat
+  Body: { sessionId: string, ttl_seconds?: number, ciphertext?: string }
+  Returns: { success: boolean, id: string, creatorToken: string, recipientToken: string, expiresAt: number }
+
+GET /api/chat/:id?token=...&sessionId=...
+  Returns: { success: boolean, role: string, hasMessage: boolean, isMyMessage: boolean, messageRead: boolean, ciphertext?: string, expiresAt: number, messageAt?: number }
+
+POST /api/chat/:id/message
+  Body: { token: string, sessionId: string, ciphertext: string }
+  Returns: { success: boolean, messageAt: number }
+
+DELETE /api/chat/:id?token=...&sessionId=...
+  Returns: { success: boolean, message: string }
+```
+
+### Stats
+
+```
+GET /api/stats
+  Returns: { notes: {...}, chats: {...}, daily: [...], generated_at: string }
+```
+
+## URL Structure
+
+### Notes
+```
+/view/{noteId}#{encryptionKey}
+```
+
+### Chat
+```
+/chat/{chatId}#{encryptionKey}:{accessToken}
+```
+
+- `encryptionKey` - Base64-encoded AES-256 key (never sent to server)
+- `accessToken` - 48-character hex token (hashed on server)
+
+## Security Considerations
+
+1. **URL Fragment Security** - The `#` portion of URLs is never sent to servers
+2. **Session Binding** - Chats are locked to the first browser that opens each link
+3. **Token Hashing** - All tokens are SHA-256 hashed before storage
+4. **Auto-Cleanup** - Expired content is automatically deleted hourly
+5. **No Logs** - No IP addresses or user identifiers are logged
+6. **HTTPS Only** - All traffic is encrypted in transit
+
+## Limitations
+
+- **localStorage Required** - Chat requires localStorage for session binding
+- **No Message History** - Only one message exists at a time in chat
+- **Browser-Bound** - Cannot access same chat from multiple devices
+- **No Offline Support** - Requires internet connection
 
 ## License
 
-MIT
+MIT License - feel free to self-host and modify.
+
+## Contributing
+
+Issues and pull requests are welcome at [GitHub](https://github.com/M-Igashi/flashpaper).
