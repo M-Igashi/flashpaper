@@ -50,20 +50,30 @@ This prevents:
 - Unauthorized access even with the correct URL
 - Session hijacking
 
-### What We Store (Temporarily)
+### What We Store in Application Database (Temporarily)
 - Encrypted ciphertext (unreadable without URL fragment key)
 - Token hashes (SHA-256, cannot reverse to original tokens)
 - Session ID hashes (SHA-256, bound on first access)
 - Creation/expiry timestamps
 - Message read status (for chat)
 
-### What We Never Store
+### What We Never Store in Application Database
 - Plaintext content
 - Encryption keys
 - Original tokens or session IDs
-- IP addresses
-- User identifiers
-- Browsing history
+
+### Infrastructure-Level Data
+Like any web service, standard infrastructure logs may temporarily exist:
+
+- **IP addresses** - May be logged by Cloudflare for DDoS protection and abuse prevention (standard for all websites)
+- **Request metadata** - Timestamps, HTTP headers, etc.
+
+This is standard for all web services and does not compromise message security because:
+1. Message content is encrypted before leaving your browser
+2. Encryption keys exist only in URL fragments (never sent to servers)
+3. Even with full server access, messages cannot be decrypted
+
+If you require IP-level anonymity, consider using Tor or a VPN.
 
 ## Technical Stack
 
@@ -183,7 +193,7 @@ GET /api/stats
 2. **Session Binding** - Chats are locked to the first browser that opens each link
 3. **Token Hashing** - All tokens are SHA-256 hashed before storage
 4. **Auto-Cleanup** - Expired content is automatically deleted hourly
-5. **No Logs** - No IP addresses or user identifiers are logged
+5. **End-to-End Encryption** - Content encrypted client-side, decryption keys never leave your browser
 6. **HTTPS Only** - All traffic is encrypted in transit
 
 ## Limitations
