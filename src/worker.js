@@ -429,7 +429,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
     </div>
     
     <footer>
-        Powered by <a href="https://workers.cloudflare.com" target="_blank">Cloudflare Workers</a> + <a href="https://developers.cloudflare.com/durable-objects/">Durable Objects</a> •Source code <a href="https://github.com/M-Igashi/flashpaper" target="_blank">GitHub</a>
+        Powered by <a href="https://workers.cloudflare.com" target="_blank">Cloudflare Workers</a> + <a href="https://developers.cloudflare.com/durable-objects/">Durable Objects</a> • Source code <a href="https://github.com/M-Igashi/flashpaper" target="_blank">GitHub</a>
     </footer>
 
     <script>
