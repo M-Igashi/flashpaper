@@ -28,6 +28,13 @@ export default {
           method: 'POST',
           body: JSON.stringify({ ...body, id }),
         }));
+
+        // Record stats (fire and forget)
+        ctx.waitUntil((async () => {
+          const statsNamespace = env.STATS_STORE;
+          const statsStub = statsNamespace.get(statsNamespace.idFromName('global'));
+          await statsStub.fetch(new Request('https://do/record', { method: 'POST' }));
+        })());
         
       } else if (method === 'GET' && path.startsWith('/api/note/')) {
         const id = path.replace('/api/note/', '');
@@ -36,6 +43,12 @@ export default {
         const stub = namespace.get(namespace.idFromName(id));
         
         response = await stub.fetch(new Request('https://do/retrieve'));
+
+      } else if (method === 'GET' && path === '/api/stats') {
+        // Get statistics
+        const statsNamespace = env.STATS_STORE;
+        const statsStub = statsNamespace.get(statsNamespace.idFromName('global'));
+        response = await statsStub.fetch(new Request('https://do/stats'));
         
       } else if (method === 'GET' && (path === '/' || path === '/index.html' || path.startsWith('/view/'))) {
         // Inject analytics token if configured
@@ -183,6 +196,105 @@ export class NoteStore {
   cleanupExpired() {
     const now = Date.now();
     this.sql.exec(`DELETE FROM notes WHERE expires_at IS NOT NULL AND expires_at < ?`, now);
+  }
+}
+
+// Statistics Durable Object
+export class StatsStore {
+  constructor(state, env) {
+    this.state = state;
+    this.sql = state.storage.sql;
+    
+    this.state.blockConcurrencyWhile(async () => {
+      this.sql.exec(`
+        CREATE TABLE IF NOT EXISTS stats (
+          date TEXT PRIMARY KEY,
+          count INTEGER NOT NULL DEFAULT 0
+        )
+      `);
+    });
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url);
+    const path = url.pathname;
+
+    if (path === '/record' && request.method === 'POST') {
+      // Record a note creation
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      this.sql.exec(`
+        INSERT INTO stats (date, count) VALUES (?, 1)
+        ON CONFLICT(date) DO UPDATE SET count = count + 1
+      `, today);
+      
+      return Response.json({ success: true });
+      
+    } else if (path === '/stats') {
+      const now = new Date();
+      
+      // Calculate date boundaries
+      const today = now.toISOString().split('T')[0];
+      
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const oneDayAgo = yesterday.toISOString().split('T')[0];
+      
+      const oneWeekAgo = new Date(now);
+      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+      const weekAgo = oneWeekAgo.toISOString().split('T')[0];
+      
+      const oneMonthAgo = new Date(now);
+      oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+      const monthAgo = oneMonthAgo.toISOString().split('T')[0];
+      
+      const oneYearAgo = new Date(now);
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+      const yearAgo = oneYearAgo.toISOString().split('T')[0];
+      
+      // Query for each period
+      const last24h = this.sql.exec(
+        `SELECT COALESCE(SUM(count), 0) as total FROM stats WHERE date >= ?`,
+        oneDayAgo
+      ).toArray()[0]?.total || 0;
+      
+      const last7d = this.sql.exec(
+        `SELECT COALESCE(SUM(count), 0) as total FROM stats WHERE date >= ?`,
+        weekAgo
+      ).toArray()[0]?.total || 0;
+      
+      const last30d = this.sql.exec(
+        `SELECT COALESCE(SUM(count), 0) as total FROM stats WHERE date >= ?`,
+        monthAgo
+      ).toArray()[0]?.total || 0;
+      
+      const last365d = this.sql.exec(
+        `SELECT COALESCE(SUM(count), 0) as total FROM stats WHERE date >= ?`,
+        yearAgo
+      ).toArray()[0]?.total || 0;
+      
+      const allTime = this.sql.exec(
+        `SELECT COALESCE(SUM(count), 0) as total FROM stats`
+      ).toArray()[0]?.total || 0;
+      
+      // Get daily breakdown for charts (last 30 days)
+      const dailyStats = this.sql.exec(
+        `SELECT date, count FROM stats WHERE date >= ? ORDER BY date ASC`,
+        monthAgo
+      ).toArray();
+      
+      return Response.json({
+        last_24h: Number(last24h),
+        last_7d: Number(last7d),
+        last_30d: Number(last30d),
+        last_365d: Number(last365d),
+        all_time: Number(allTime),
+        daily: dailyStats,
+        generated_at: now.toISOString()
+      });
+    }
+
+    return new Response('Not Found', { status: 404 });
   }
 }
 
