@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /view/
+Disallow: /chat/
+Disallow: /api/
+Allow: /
+
+Sitemap: https://flashpaper.ravers.workers.dev/sitemap.xml

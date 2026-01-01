@@ -159,6 +159,19 @@ export default {
           });
         }
 
+      } else if (method === 'GET' && path === '/robots.txt') {
+        const object = await env.SITE_BUCKET.get('robots.txt');
+        if (object === null) {
+          response = new Response('Not Found', { status: 404 });
+        } else {
+          return new Response(object.body, {
+            headers: { 
+              'Content-Type': 'text/plain; charset=utf-8',
+              ...corsHeaders 
+            },
+          });
+        }
+
       // ===== HTML PAGES =====
       } else if (method === 'GET' && (path === '/' || path === '/index.html' || path === '/chat' || path === '/chat/new' || path.startsWith('/view/') || path.match(/^\/chat\/[^\/]+$/))) {
         const analyticsToken = env.CF_ANALYTICS_TOKEN || '';
