@@ -1236,7 +1236,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
             const resultLink = document.getElementById('note-result-link');
             
             const plaintext = noteInput.value.trim();
-            if (!plaintext) { alert('Please enter a note'); return; }
+            if (!plaintext) { showAlert('Please enter a note', '⚠️ Input Required'); return; }
             
             createBtn.disabled = true;
             createBtn.innerHTML = '<span class="loading"></span> Creating...';
@@ -1262,7 +1262,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 noteInput.value = '';
             } catch (error) {
                 console.error('Error:', error);
-                alert('Failed to create note. Please try again.');
+                showAlert('Failed to create note. Please try again.', '❌ Error');
             } finally {
                 createBtn.disabled = false;
                 createBtn.innerHTML = 'Create Secure Note';
@@ -1364,7 +1364,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 result.classList.add('show');
             } catch (error) {
                 console.error('Error:', error);
-                alert('Failed to create chat. Please try again.');
+                showAlert('Failed to create chat. Please try again.', '❌ Error');
             } finally {
                 createBtn.disabled = false;
                 createBtn.innerHTML = 'Start Secure Chat';
@@ -1478,7 +1478,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
             const sendBtn = document.getElementById('send-btn');
             const plaintext = replyInput.value.trim();
             
-            if (!plaintext) { alert('Please enter a message'); return; }
+            if (!plaintext) { showAlert('Please enter a message', '⚠️ Input Required'); return; }
             
             sendBtn.disabled = true;
             sendBtn.innerHTML = '<span class="loading chat"></span> Sending...';
@@ -1500,7 +1500,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 await loadChat();
             } catch (error) {
                 console.error('Error:', error);
-                alert('Failed to send message: ' + error.message);
+                showAlert('Failed to send message: ' + error.message, '❌ Error');
             } finally {
                 sendBtn.disabled = false;
                 sendBtn.innerHTML = 'Send Message';
