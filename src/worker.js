@@ -904,6 +904,67 @@ const HTML_CONTENT = `<!DOCTYPE html>
         footer a { color: var(--accent); text-decoration: none; }
         
         .hidden { display: none !important; }
+        
+        /* Custom Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s, visibility 0.2s;
+        }
+        
+        .modal-overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        .modal-content {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 2rem;
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+            transform: scale(0.9);
+            transition: transform 0.2s;
+        }
+        
+        .modal-overlay.show .modal-content {
+            transform: scale(1);
+        }
+        
+        .modal-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+        }
+        
+        .modal-message {
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+            line-height: 1.5;
+        }
+        
+        .modal-buttons {
+            display: flex;
+            gap: 0.75rem;
+        }
+        
+        .modal-buttons button {
+            flex: 1;
+            padding: 0.75rem 1rem;
+        }
     </style>
 </head>
 <body>
@@ -1044,6 +1105,29 @@ const HTML_CONTENT = `<!DOCTYPE html>
             <div class="card">
                 <p class="error-msg" id="error-message"></p>
                 <button onclick="window.location.href='/'">Back to Home</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Custom Modal for Destroy Confirmation -->
+    <div id="modal-overlay" class="modal-overlay" onclick="closeModal(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-title" id="modal-title">⚠️ Confirm Destroy</div>
+            <div class="modal-message" id="modal-message">Are you sure you want to destroy this chat? This cannot be undone.</div>
+            <div class="modal-buttons">
+                <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+                <button class="btn-danger" id="modal-confirm-btn" onclick="confirmDestroyChat()">Destroy</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Alert Modal -->
+    <div id="alert-overlay" class="modal-overlay" onclick="closeAlert(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-title" id="alert-title">Notice</div>
+            <div class="modal-message" id="alert-message"></div>
+            <div class="modal-buttons">
+                <button class="btn-chat" onclick="closeAlert()">OK</button>
             </div>
         </div>
     </div>
@@ -1435,8 +1519,39 @@ const HTML_CONTENT = `<!DOCTYPE html>
             loadChat();
         }
         
-        async function destroyChat() {
-            if (!confirm('Are you sure you want to destroy this chat? This cannot be undone.')) return;
+        // Custom Modal Functions (for Twitter/X browser compatibility)
+        function showModal() {
+            document.getElementById('modal-overlay').classList.add('show');
+        }
+        
+        function closeModal(event) {
+            if (event && event.target !== event.currentTarget) return;
+            document.getElementById('modal-overlay').classList.remove('show');
+        }
+        
+        function showAlert(message, title = 'Notice', callback = null) {
+            document.getElementById('alert-title').textContent = title;
+            document.getElementById('alert-message').textContent = message;
+            window.alertCallback = callback;
+            document.getElementById('alert-overlay').classList.add('show');
+        }
+        
+        function closeAlert(event) {
+            if (event && event.target !== event.currentTarget) return;
+            document.getElementById('alert-overlay').classList.remove('show');
+            if (window.alertCallback) {
+                window.alertCallback();
+                window.alertCallback = null;
+            }
+        }
+        
+        // Destroy Chat Functions
+        function destroyChat() {
+            showModal();
+        }
+        
+        async function confirmDestroyChat() {
+            closeModal();
             
             try {
                 stopAutoRefresh();
@@ -1452,11 +1567,12 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 // Clear session ID
                 clearSessionId(chatId);
                 
-                alert('Chat destroyed successfully.');
-                window.location.href = '/chat';
+                showAlert('Chat destroyed successfully.', '✅ Success', function() {
+                    window.location.href = '/chat';
+                });
             } catch (error) {
                 console.error('Error:', error);
-                alert('Failed to destroy chat: ' + error.message);
+                showAlert('Failed to destroy chat: ' + error.message, '❌ Error');
             }
         }
         
