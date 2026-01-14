@@ -176,6 +176,16 @@ export default {
       } else if (method === 'GET' && (path === '/' || path === '/index.html' || path === '/chat' || path === '/chat/new' || path.startsWith('/view/') || path.match(/^\/chat\/[^\/]+$/))) {
         const analyticsToken = env.CF_ANALYTICS_TOKEN || '';
         let html = HTML_CONTENT;
+        
+        // Generate SEO meta tags based on path
+        const baseUrl = 'https://flashpaper.ravers.workers.dev';
+        const isMainPage = path === '/' || path === '/index.html';
+        let seoMetaTags = `<link rel="canonical" href="${baseUrl}/">`;
+        if (!isMainPage) {
+          seoMetaTags += '\n    <meta name="robots" content="noindex, nofollow">';
+        }
+        html = html.replace('{{SEO_META_TAGS}}', seoMetaTags);
+        
         if (analyticsToken) {
           html = html.replace('{{CF_ANALYTICS_TOKEN}}', analyticsToken);
         } else {
@@ -644,6 +654,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {{SEO_META_TAGS}}
     <title>Flashpaper - Self-Destructing Encrypted Note/Chat</title>
     <style>
         :root {
