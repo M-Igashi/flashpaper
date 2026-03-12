@@ -1,3 +1,5 @@
+import { DurableObject } from 'cloudflare:workers';
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -211,8 +213,8 @@ export default {
       });
       
     } catch (error) {
-      console.error('Error:', error);
-      return new Response(JSON.stringify({ error: error.message }), {
+      console.error(JSON.stringify({ message: 'unhandled error', error: error instanceof Error ? error.message : String(error), path }));
+      return new Response(JSON.stringify({ error: 'Internal server error' }), {
         status: 500,
         headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
@@ -236,8 +238,19 @@ export default {
 
 function generateId() {
   const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substring(2, 10);
+  const bytes = new Uint8Array(5);
+  crypto.getRandomValues(bytes);
+  const random = Array.from(bytes, b => b.toString(36).padStart(2, '0')).join('').substring(0, 8);
   return timestamp + random;
+}
+
+function timingSafeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const encoder = new TextEncoder();
+  const bufA = encoder.encode(a);
+  const bufB = encoder.encode(b);
+  if (bufA.byteLength !== bufB.byteLength) return false;
+  return crypto.subtle.timingSafeEqual(bufA, bufB);
 }
 
 function generateToken() {
@@ -247,12 +260,12 @@ function generateToken() {
 }
 
 // ===== NOTE STORE =====
-export class NoteStore {
-  constructor(state, env) {
-    this.state = state;
-    this.sql = state.storage.sql;
-    
-    this.state.blockConcurrencyWhile(async () => {
+export class NoteStore extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.sql = ctx.storage.sql;
+
+    ctx.blockConcurrencyWhile(async () => {
       this.sql.exec(`
         CREATE TABLE IF NOT EXISTS notes (
           id TEXT PRIMARY KEY,
@@ -273,38 +286,38 @@ export class NoteStore {
     if (path === '/store') {
       const body = await request.json();
       const { id, ciphertext, ttl_seconds } = body;
-      
+
       const now = Date.now();
       const maxRetention = 7 * 24 * 60 * 60 * 1000;
-      const expiresAt = ttl_seconds 
+      const expiresAt = ttl_seconds
         ? now + (ttl_seconds * 1000)
         : now + maxRetention;
-      
+
       this.sql.exec(
         `INSERT INTO notes (id, ciphertext, created_at, expires_at) VALUES (?, ?, ?, ?)`,
         id, ciphertext, now, expiresAt
       );
-      
+
       return Response.json({ id });
-      
+
     } else if (path === '/retrieve') {
       const rows = this.sql.exec(`SELECT * FROM notes LIMIT 1`).toArray();
-      
+
       if (rows.length === 0) {
         return Response.json({ success: false, error: 'Note not found or already read' });
       }
-      
+
       const note = rows[0];
-      
+
       if (note.expires_at && Date.now() > note.expires_at) {
         this.sql.exec(`DELETE FROM notes WHERE id = ?`, note.id);
         return Response.json({ success: false, error: 'Note has expired' });
       }
-      
+
       this.sql.exec(`DELETE FROM notes WHERE id = ?`, note.id);
-      
+
       return Response.json({ success: true, ciphertext: note.ciphertext });
-      
+
     } else if (path === '/cleanup-all') {
       const now = Date.now();
       this.sql.exec(`DELETE FROM notes WHERE expires_at IS NOT NULL AND expires_at < ?`, now);
@@ -321,12 +334,12 @@ export class NoteStore {
 }
 
 // ===== CHAT STORE =====
-export class ChatStore {
-  constructor(state, env) {
-    this.state = state;
-    this.sql = state.storage.sql;
-    
-    this.state.blockConcurrencyWhile(async () => {
+export class ChatStore extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.sql = ctx.storage.sql;
+
+    ctx.blockConcurrencyWhile(async () => {
       this.sql.exec(`
         CREATE TABLE IF NOT EXISTS chats (
           id TEXT PRIMARY KEY,
@@ -404,16 +417,16 @@ export class ChatStore {
         return Response.json({ success: false, error: 'Chat has expired' });
       }
       
-      const isCreator = tokenHash === chat.creator_token_hash;
-      const isRecipient = tokenHash === chat.recipient_token_hash;
-      
+      const isCreator = timingSafeEqual(tokenHash, chat.creator_token_hash);
+      const isRecipient = timingSafeEqual(tokenHash, chat.recipient_token_hash);
+
       if (!isCreator && !isRecipient) {
         return Response.json({ success: false, error: 'Invalid token' }, { status: 401 });
       }
-      
+
       // Session binding check
       if (isCreator) {
-        if (chat.creator_session_hash && chat.creator_session_hash !== sessionHash) {
+        if (chat.creator_session_hash && !timingSafeEqual(chat.creator_session_hash, sessionHash)) {
           return Response.json({ success: false, error: 'Session mismatch - this chat is bound to another browser' }, { status: 403 });
         }
         // Bind session if not yet bound
@@ -422,7 +435,7 @@ export class ChatStore {
         }
       } else {
         // Recipient
-        if (chat.recipient_session_hash && chat.recipient_session_hash !== sessionHash) {
+        if (chat.recipient_session_hash && !timingSafeEqual(chat.recipient_session_hash, sessionHash)) {
           return Response.json({ success: false, error: 'Session mismatch - this chat is bound to another browser' }, { status: 403 });
         }
         // Bind session if not yet bound (first access)
@@ -430,7 +443,7 @@ export class ChatStore {
           this.sql.exec(`UPDATE chats SET recipient_session_hash = ? WHERE id = ?`, sessionHash, chat.id);
         }
       }
-      
+
       const role = isCreator ? 'creator' : 'recipient';
       const hasMessage = !!chat.current_message;
       const isMyMessage = chat.current_sender === role;
@@ -469,21 +482,21 @@ export class ChatStore {
         return Response.json({ success: false, error: 'Chat has expired' });
       }
       
-      const isCreator = tokenHash === chat.creator_token_hash;
-      const isRecipient = tokenHash === chat.recipient_token_hash;
-      
+      const isCreator = timingSafeEqual(tokenHash, chat.creator_token_hash);
+      const isRecipient = timingSafeEqual(tokenHash, chat.recipient_token_hash);
+
       if (!isCreator && !isRecipient) {
         return Response.json({ success: false, error: 'Invalid token' }, { status: 401 });
       }
-      
+
       // Session binding check
-      if (isCreator && chat.creator_session_hash && chat.creator_session_hash !== sessionHash) {
+      if (isCreator && chat.creator_session_hash && !timingSafeEqual(chat.creator_session_hash, sessionHash)) {
         return Response.json({ success: false, error: 'Session mismatch' }, { status: 403 });
       }
-      if (isRecipient && chat.recipient_session_hash && chat.recipient_session_hash !== sessionHash) {
+      if (isRecipient && chat.recipient_session_hash && !timingSafeEqual(chat.recipient_session_hash, sessionHash)) {
         return Response.json({ success: false, error: 'Session mismatch' }, { status: 403 });
       }
-      
+
       const role = isCreator ? 'creator' : 'recipient';
       const now = Date.now();
       
@@ -508,19 +521,19 @@ export class ChatStore {
       
       const chat = rows[0];
       
-      const isCreator = tokenHash === chat.creator_token_hash;
-      const isRecipient = tokenHash === chat.recipient_token_hash;
-      
+      const isCreator = timingSafeEqual(tokenHash, chat.creator_token_hash);
+      const isRecipient = timingSafeEqual(tokenHash, chat.recipient_token_hash);
+
       if (!isCreator && !isRecipient) {
         return Response.json({ success: false, error: 'Invalid token' }, { status: 401 });
       }
-      
+
       // Session check for destroy (if session exists)
       if (sessionHash) {
-        if (isCreator && chat.creator_session_hash && chat.creator_session_hash !== sessionHash) {
+        if (isCreator && chat.creator_session_hash && !timingSafeEqual(chat.creator_session_hash, sessionHash)) {
           return Response.json({ success: false, error: 'Session mismatch' }, { status: 403 });
         }
-        if (isRecipient && chat.recipient_session_hash && chat.recipient_session_hash !== sessionHash) {
+        if (isRecipient && chat.recipient_session_hash && !timingSafeEqual(chat.recipient_session_hash, sessionHash)) {
           return Response.json({ success: false, error: 'Session mismatch' }, { status: 403 });
         }
       }
@@ -553,12 +566,12 @@ export class ChatStore {
 }
 
 // ===== STATS STORE =====
-export class StatsStore {
-  constructor(state, env) {
-    this.state = state;
-    this.sql = state.storage.sql;
-    
-    this.state.blockConcurrencyWhile(async () => {
+export class StatsStore extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.sql = ctx.storage.sql;
+
+    ctx.blockConcurrencyWhile(async () => {
       // Check if old schema exists (with 'count' column)
       try {
         const tableInfo = this.sql.exec(`PRAGMA table_info(stats)`).toArray();
