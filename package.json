@@ -7,7 +7,5 @@
     "deploy": "wrangler deploy",
     "build": "cargo install worker-build && worker-build --release"
   },
-  "devDependencies": {
-    "wrangler": "^4.58.0"
-  }
+  "devDependencies": {}
 }
