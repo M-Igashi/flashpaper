@@ -1,5 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 
+const encoder = new TextEncoder();
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -226,12 +228,15 @@ export default {
     
     const noteNamespace = env.NOTE_STORE;
     const noteStub = noteNamespace.get(noteNamespace.idFromName('__cleanup__'));
-    await noteStub.fetch(new Request('https://do/cleanup-all'));
-    
+
     const chatNamespace = env.CHAT_STORE;
     const chatStub = chatNamespace.get(chatNamespace.idFromName('__cleanup__'));
-    await chatStub.fetch(new Request('https://do/cleanup-all'));
-    
+
+    await Promise.all([
+      noteStub.fetch(new Request('https://do/cleanup-all')),
+      chatStub.fetch(new Request('https://do/cleanup-all')),
+    ]);
+
     console.log('Cleanup completed');
   },
 };
@@ -244,9 +249,9 @@ function generateId() {
   return timestamp + random;
 }
 
+// For comparing hashed values only (fixed-length strings)
 function timingSafeEqual(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
-  const encoder = new TextEncoder();
   const bufA = encoder.encode(a);
   const bufB = encoder.encode(b);
   if (bufA.byteLength !== bufB.byteLength) return false;
@@ -553,7 +558,6 @@ export class ChatStore extends DurableObject {
 
   async hashToken(token) {
     if (!token) return null;
-    const encoder = new TextEncoder();
     const data = encoder.encode(token);
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
     return Array.from(new Uint8Array(hashBuffer), b => b.toString(16).padStart(2, '0')).join('');
