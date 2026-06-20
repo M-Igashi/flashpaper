@@ -50,6 +50,10 @@ npx wrangler deploy
 - Encryption keys
 - Original access tokens
 
+**What is never logged:**
+- Client IP addresses — the Worker does not read them, and Cloudflare's Workers Logs (observability) is disabled, so request metadata and headers (including client IP) are not captured or retained
+- Cloudflare Web Analytics is cookieless and does not use client IP or fingerprinting
+
 </details>
 
 <details>
