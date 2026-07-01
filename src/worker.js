@@ -184,8 +184,19 @@ export default {
         // Generate SEO meta tags based on path
         const baseUrl = 'https://flashpaper.ravers.workers.dev';
         const isMainPage = path === '/' || path === '/index.html';
-        let seoMetaTags = `<link rel="canonical" href="${baseUrl}/">`;
-        if (!isMainPage) {
+        const isChatLanding = path === '/chat';
+        const isIndexable = isMainPage || isChatLanding;
+        const canonicalUrl = isChatLanding ? `${baseUrl}/chat` : `${baseUrl}/`;
+        const pageTitle = isChatLanding
+          ? 'Flashpaper Chat - Self-Destructing Encrypted Chat'
+          : 'Flashpaper - Self-Destructing Encrypted Note/Chat';
+        const pageDescription = isChatLanding
+          ? 'Create an end-to-end encrypted, self-destructing chat room. No accounts, no tracking, messages vanish after reading.'
+          : 'Share end-to-end encrypted, self-destructing notes and chats. No accounts, no tracking, content vanishes after reading.';
+        let seoMetaTags = `<link rel="canonical" href="${canonicalUrl}">`;
+        seoMetaTags += `\n    <meta name="description" content="${pageDescription}">`;
+        seoMetaTags += `\n    <title>${pageTitle}</title>`;
+        if (!isIndexable) {
           seoMetaTags += '\n    <meta name="robots" content="noindex, nofollow">';
         }
         html = html.replace('{{SEO_META_TAGS}}', seoMetaTags);
@@ -672,7 +683,6 @@ const HTML_CONTENT = `<!DOCTYPE html>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     {{SEO_META_TAGS}}
-    <title>Flashpaper - Self-Destructing Encrypted Note/Chat</title>
     <style>
         :root {
             --bg-primary: #0a0a0a;
