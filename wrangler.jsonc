@@ -26,11 +26,6 @@
     { "tag": "v3", "new_sqlite_classes": ["ChatStore"] }
   ],
 
-  // Cron trigger - runs every hour to clean up expired notes and chats
-  "triggers": {
-    "crons": ["0 * * * *"]
-  },
-
   // Observability disabled: avoids Cloudflare capturing/retaining request
   // metadata and headers (incl. client IP) in Workers Logs for up to 7 days.
   "observability": {

@@ -348,17 +348,17 @@
             const content = document.getElementById('content');
             const generatedAt = new Date(data.generated_at).toLocaleString();
             
-            const notes = data.notes || { last_24h: data.last_24h, last_7d: data.last_7d, last_30d: data.last_30d, last_365d: data.last_365d, all_time: data.all_time };
-            const chats = data.chats || { last_24h: 0, last_7d: 0, last_30d: 0, last_365d: 0, all_time: 0 };
-            
+            const notes = data.notes;
+            const chats = data.chats;
+
             const totalAllTime = notes.all_time + chats.all_time;
-            
+
             // Calculate max for chart scaling
-            const maxDaily = Math.max(...data.daily.map(d => (d.note_count || d.count || 0) + (d.chat_count || 0)), 1);
-            
+            const maxDaily = Math.max(...data.daily.map(d => (d.note_count || 0) + (d.chat_count || 0)), 1);
+
             // Generate stacked chart bars
             const chartBars = data.daily.map(day => {
-                const noteCount = day.note_count || day.count || 0;
+                const noteCount = day.note_count || 0;
                 const chatCount = day.chat_count || 0;
                 const total = noteCount + chatCount;
                 const noteHeight = (noteCount / maxDaily) * 140;

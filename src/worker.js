@@ -25,56 +25,36 @@ export default {
       if (method === 'POST' && path === '/api/note') {
         const body = await request.json();
         const id = generateId();
-        
-        const namespace = env.NOTE_STORE;
-        const stub = namespace.get(namespace.idFromName(id));
-        
-        response = await stub.fetch(new Request('https://do/store', {
+
+        response = await doFetch(env.NOTE_STORE, id, '/store', {
           method: 'POST',
           body: JSON.stringify({ ...body, id }),
-        }));
+        });
 
-        ctx.waitUntil((async () => {
-          const statsNamespace = env.STATS_STORE;
-          const statsStub = statsNamespace.get(statsNamespace.idFromName('global'));
-          await statsStub.fetch(new Request('https://do/record', { method: 'POST' }));
-        })());
-        
+        ctx.waitUntil(doFetch(env.STATS_STORE, 'global', '/record', { method: 'POST' }));
+
       } else if (method === 'GET' && path.startsWith('/api/note/')) {
         const id = path.replace('/api/note/', '');
-        
-        const namespace = env.NOTE_STORE;
-        const stub = namespace.get(namespace.idFromName(id));
-        
-        response = await stub.fetch(new Request('https://do/retrieve'));
+        response = await doFetch(env.NOTE_STORE, id, '/retrieve');
 
       // ===== CHAT API =====
       } else if (method === 'POST' && path === '/api/chat') {
         const body = await request.json();
         const id = generateId();
-        const creatorToken = generateToken();
-        const recipientToken = generateToken();
-        
-        const namespace = env.CHAT_STORE;
-        const stub = namespace.get(namespace.idFromName(id));
-        
-        response = await stub.fetch(new Request('https://do/create', {
+
+        response = await doFetch(env.CHAT_STORE, id, '/create', {
           method: 'POST',
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             id,
-            creatorToken,
-            recipientToken,
+            creatorToken: generateToken(),
+            recipientToken: generateToken(),
             creatorSessionId: body.sessionId,
             ttl_seconds: body.ttl_seconds,
             initialMessage: body.ciphertext
           }),
-        }));
+        });
 
-        ctx.waitUntil((async () => {
-          const statsNamespace = env.STATS_STORE;
-          const statsStub = statsNamespace.get(statsNamespace.idFromName('global'));
-          await statsStub.fetch(new Request('https://do/record-chat', { method: 'POST' }));
-        })());
+        ctx.waitUntil(doFetch(env.STATS_STORE, 'global', '/record-chat', { method: 'POST' }));
         
       } else if (method === 'GET' && path.match(/^\/api\/chat\/[^\/]+$/)) {
         const id = path.replace('/api/chat/', '');
@@ -86,10 +66,7 @@ export default {
         } else if (!sessionId) {
           response = Response.json({ success: false, error: 'Session ID required' }, { status: 401 });
         } else {
-          const namespace = env.CHAT_STORE;
-          const stub = namespace.get(namespace.idFromName(id));
-          
-          response = await stub.fetch(new Request('https://do/get?token=' + encodeURIComponent(token) + '&sessionId=' + encodeURIComponent(sessionId)));
+          response = await doFetch(env.CHAT_STORE, id, '/get?token=' + encodeURIComponent(token) + '&sessionId=' + encodeURIComponent(sessionId));
         }
         
       } else if (method === 'POST' && path.match(/^\/api\/chat\/[^\/]+\/message$/)) {
@@ -101,17 +78,14 @@ export default {
         } else if (!body.sessionId) {
           response = Response.json({ success: false, error: 'Session ID required' }, { status: 401 });
         } else {
-          const namespace = env.CHAT_STORE;
-          const stub = namespace.get(namespace.idFromName(id));
-          
-          response = await stub.fetch(new Request('https://do/message', {
+          response = await doFetch(env.CHAT_STORE, id, '/message', {
             method: 'POST',
             body: JSON.stringify({
               token: body.token,
               sessionId: body.sessionId,
               ciphertext: body.ciphertext
             }),
-          }));
+          });
         }
         
       } else if (method === 'DELETE' && path.match(/^\/api\/chat\/[^\/]+$/)) {
@@ -122,59 +96,21 @@ export default {
         if (!token) {
           response = Response.json({ success: false, error: 'Token required' }, { status: 401 });
         } else {
-          const namespace = env.CHAT_STORE;
-          const stub = namespace.get(namespace.idFromName(id));
-          
-          response = await stub.fetch(new Request('https://do/destroy?token=' + encodeURIComponent(token) + '&sessionId=' + encodeURIComponent(sessionId || ''), {
+          response = await doFetch(env.CHAT_STORE, id, '/destroy?token=' + encodeURIComponent(token) + '&sessionId=' + encodeURIComponent(sessionId || ''), {
             method: 'DELETE'
-          }));
+          });
         }
 
       // ===== STATS API =====
       } else if (method === 'GET' && path === '/api/stats') {
-        const statsNamespace = env.STATS_STORE;
-        const statsStub = statsNamespace.get(statsNamespace.idFromName('global'));
-        response = await statsStub.fetch(new Request('https://do/stats'));
-        
+        response = await doFetch(env.STATS_STORE, 'global', '/stats');
+
       // ===== STATIC FILES (R2) =====
-      } else if (method === 'GET' && path === '/google174732a25afed9fc.html') {
-        const object = await env.SITE_BUCKET.get('google174732a25afed9fc.html');
-        if (object === null) {
-          response = new Response('Not Found', { status: 404 });
-        } else {
-          return new Response(object.body, {
-            headers: { 
-              'Content-Type': 'text/html; charset=utf-8',
-              ...corsHeaders 
-            },
-          });
-        }
-
-      } else if (method === 'GET' && path === '/sitemap.xml') {
-        const object = await env.SITE_BUCKET.get('sitemap.xml');
-        if (object === null) {
-          response = new Response('Not Found', { status: 404 });
-        } else {
-          return new Response(object.body, {
-            headers: { 
-              'Content-Type': 'application/xml; charset=utf-8',
-              ...corsHeaders 
-            },
-          });
-        }
-
-      } else if (method === 'GET' && path === '/robots.txt') {
-        const object = await env.SITE_BUCKET.get('robots.txt');
-        if (object === null) {
-          response = new Response('Not Found', { status: 404 });
-        } else {
-          return new Response(object.body, {
-            headers: { 
-              'Content-Type': 'text/plain; charset=utf-8',
-              ...corsHeaders 
-            },
-          });
-        }
+      } else if (method === 'GET' && STATIC_FILES[path]) {
+        const object = await env.SITE_BUCKET.get(path.slice(1));
+        response = object
+          ? new Response(object.body, { headers: { 'Content-Type': STATIC_FILES[path] } })
+          : new Response('Not Found', { status: 404 });
 
       // ===== HTML PAGES =====
       } else if (method === 'GET' && (path === '/' || path === '/index.html' || path === '/chat' || path === '/chat/new' || path.startsWith('/view/') || path.match(/^\/chat\/[^\/]+$/))) {
@@ -233,24 +169,17 @@ export default {
       });
     }
   },
-
-  async scheduled(event, env, ctx) {
-    console.log('Cron triggered: cleaning up old notes and chats');
-    
-    const noteNamespace = env.NOTE_STORE;
-    const noteStub = noteNamespace.get(noteNamespace.idFromName('__cleanup__'));
-
-    const chatNamespace = env.CHAT_STORE;
-    const chatStub = chatNamespace.get(chatNamespace.idFromName('__cleanup__'));
-
-    await Promise.all([
-      noteStub.fetch(new Request('https://do/cleanup-all')),
-      chatStub.fetch(new Request('https://do/cleanup-all')),
-    ]);
-
-    console.log('Cleanup completed');
-  },
 };
+
+const STATIC_FILES = {
+  '/google174732a25afed9fc.html': 'text/html; charset=utf-8',
+  '/sitemap.xml': 'application/xml; charset=utf-8',
+  '/robots.txt': 'text/plain; charset=utf-8',
+};
+
+function doFetch(binding, name, path, init) {
+  return binding.get(binding.idFromName(name)).fetch('https://do' + path, init);
+}
 
 function generateId() {
   const timestamp = Date.now().toString(36);
@@ -269,10 +198,20 @@ function timingSafeEqual(a, b) {
   return crypto.subtle.timingSafeEqual(bufA, bufB);
 }
 
+function toHex(bytes) {
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+
 function generateToken() {
   const array = new Uint8Array(24);
   crypto.getRandomValues(array);
-  return Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
+  return toHex(array);
+}
+
+async function hashToken(token) {
+  if (!token) return null;
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(token));
+  return toHex(new Uint8Array(hashBuffer));
 }
 
 // ===== NOTE STORE =====
@@ -297,8 +236,6 @@ export class NoteStore extends DurableObject {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    this.cleanupExpired();
-
     if (path === '/store') {
       const body = await request.json();
       const { id, ciphertext, ttl_seconds } = body;
@@ -313,6 +250,7 @@ export class NoteStore extends DurableObject {
         `INSERT INTO notes (id, ciphertext, created_at, expires_at) VALUES (?, ?, ?, ?)`,
         id, ciphertext, now, expiresAt
       );
+      await this.ctx.storage.setAlarm(expiresAt);
 
       return Response.json({ id });
 
@@ -324,28 +262,20 @@ export class NoteStore extends DurableObject {
       }
 
       const note = rows[0];
+      this.sql.exec(`DELETE FROM notes WHERE id = ?`, note.id);
 
       if (note.expires_at && Date.now() > note.expires_at) {
-        this.sql.exec(`DELETE FROM notes WHERE id = ?`, note.id);
         return Response.json({ success: false, error: 'Note has expired' });
       }
 
-      this.sql.exec(`DELETE FROM notes WHERE id = ?`, note.id);
-
       return Response.json({ success: true, ciphertext: note.ciphertext });
-
-    } else if (path === '/cleanup-all') {
-      const now = Date.now();
-      this.sql.exec(`DELETE FROM notes WHERE expires_at IS NOT NULL AND expires_at < ?`, now);
-      return Response.json({ success: true });
     }
 
     return new Response('Not Found', { status: 404 });
   }
 
-  cleanupExpired() {
-    const now = Date.now();
-    this.sql.exec(`DELETE FROM notes WHERE expires_at IS NOT NULL AND expires_at < ?`, now);
+  async alarm() {
+    this.sql.exec(`DELETE FROM notes`);
   }
 }
 
@@ -371,9 +301,6 @@ export class ChatStore extends DurableObject {
           message_read INTEGER DEFAULT 0
         )
       `);
-      // Migration
-      try { this.sql.exec(`ALTER TABLE chats ADD COLUMN creator_session_hash TEXT`); } catch (e) {}
-      try { this.sql.exec(`ALTER TABLE chats ADD COLUMN recipient_session_hash TEXT`); } catch (e) {}
     });
   }
 
@@ -381,93 +308,61 @@ export class ChatStore extends DurableObject {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    this.cleanupExpired();
-
     if (path === '/create') {
       const body = await request.json();
       const { id, creatorToken, recipientToken, creatorSessionId, ttl_seconds, initialMessage } = body;
-      
+
       const now = Date.now();
       const defaultTTL = 24 * 60 * 60 * 1000;
-      const expiresAt = ttl_seconds 
+      const expiresAt = ttl_seconds
         ? now + (ttl_seconds * 1000)
         : now + defaultTTL;
-      
-      const creatorHash = await this.hashToken(creatorToken);
-      const recipientHash = await this.hashToken(recipientToken);
-      const creatorSessionHash = creatorSessionId ? await this.hashToken(creatorSessionId) : null;
-      
+
+      const [creatorHash, recipientHash, creatorSessionHash] = await Promise.all([
+        hashToken(creatorToken),
+        hashToken(recipientToken),
+        hashToken(creatorSessionId),
+      ]);
+
       this.sql.exec(
-        `INSERT INTO chats (id, creator_token_hash, recipient_token_hash, creator_session_hash, recipient_session_hash, created_at, expires_at, current_message, current_sender, message_at) 
+        `INSERT INTO chats (id, creator_token_hash, recipient_token_hash, creator_session_hash, recipient_session_hash, created_at, expires_at, current_message, current_sender, message_at)
          VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)`,
         id, creatorHash, recipientHash, creatorSessionHash, now, expiresAt,
         initialMessage || null,
         initialMessage ? 'creator' : null,
         initialMessage ? now : null
       );
-      
-      return Response.json({ 
+      await this.ctx.storage.setAlarm(expiresAt);
+
+      return Response.json({
         success: true,
         id,
         creatorToken,
         recipientToken,
         expiresAt
       });
-      
+
     } else if (path === '/get') {
-      const token = url.searchParams.get('token');
-      const sessionId = url.searchParams.get('sessionId');
-      const tokenHash = await this.hashToken(token);
-      const sessionHash = await this.hashToken(sessionId);
-      
-      const rows = this.sql.exec(`SELECT * FROM chats LIMIT 1`).toArray();
-      
-      if (rows.length === 0) {
-        return Response.json({ success: false, error: 'Chat not found or expired' });
-      }
-      
-      const chat = rows[0];
-      
-      if (Date.now() > chat.expires_at) {
-        this.sql.exec(`DELETE FROM chats WHERE id = ?`, chat.id);
-        return Response.json({ success: false, error: 'Chat has expired' });
-      }
-      
-      const isCreator = timingSafeEqual(tokenHash, chat.creator_token_hash);
-      const isRecipient = timingSafeEqual(tokenHash, chat.recipient_token_hash);
+      const [tokenHash, sessionHash] = await Promise.all([
+        hashToken(url.searchParams.get('token')),
+        hashToken(url.searchParams.get('sessionId')),
+      ]);
 
-      if (!isCreator && !isRecipient) {
-        return Response.json({ success: false, error: 'Invalid token' }, { status: 401 });
+      const { chat, role, sessionCol, error } = this.authorize(tokenHash, sessionHash);
+      if (error) return error;
+
+      // Bind session on first access
+      if (!chat[sessionCol]) {
+        this.sql.exec(`UPDATE chats SET ${sessionCol} = ? WHERE id = ?`, sessionHash, chat.id);
       }
 
-      // Session binding check
-      if (isCreator) {
-        if (chat.creator_session_hash && !timingSafeEqual(chat.creator_session_hash, sessionHash)) {
-          return Response.json({ success: false, error: 'Session mismatch - this chat is bound to another browser' }, { status: 403 });
-        }
-        // Bind session if not yet bound
-        if (!chat.creator_session_hash) {
-          this.sql.exec(`UPDATE chats SET creator_session_hash = ? WHERE id = ?`, sessionHash, chat.id);
-        }
-      } else {
-        // Recipient
-        if (chat.recipient_session_hash && !timingSafeEqual(chat.recipient_session_hash, sessionHash)) {
-          return Response.json({ success: false, error: 'Session mismatch - this chat is bound to another browser' }, { status: 403 });
-        }
-        // Bind session if not yet bound (first access)
-        if (!chat.recipient_session_hash) {
-          this.sql.exec(`UPDATE chats SET recipient_session_hash = ? WHERE id = ?`, sessionHash, chat.id);
-        }
-      }
-
-      const role = isCreator ? 'creator' : 'recipient';
       const hasMessage = !!chat.current_message;
       const isMyMessage = chat.current_sender === role;
-      
+
       if (hasMessage && !isMyMessage && !chat.message_read) {
         this.sql.exec(`UPDATE chats SET message_read = 1 WHERE id = ?`, chat.id);
       }
-      
+
       return Response.json({
         success: true,
         role,
@@ -478,105 +373,72 @@ export class ChatStore extends DurableObject {
         ciphertext: hasMessage ? chat.current_message : null,
         messageAt: chat.message_at
       });
-      
+
     } else if (path === '/message') {
       const body = await request.json();
-      const { token, sessionId, ciphertext } = body;
-      const tokenHash = await this.hashToken(token);
-      const sessionHash = await this.hashToken(sessionId);
-      
-      const rows = this.sql.exec(`SELECT * FROM chats LIMIT 1`).toArray();
-      
-      if (rows.length === 0) {
-        return Response.json({ success: false, error: 'Chat not found or expired' });
-      }
-      
-      const chat = rows[0];
-      
-      if (Date.now() > chat.expires_at) {
-        this.sql.exec(`DELETE FROM chats WHERE id = ?`, chat.id);
-        return Response.json({ success: false, error: 'Chat has expired' });
-      }
-      
-      const isCreator = timingSafeEqual(tokenHash, chat.creator_token_hash);
-      const isRecipient = timingSafeEqual(tokenHash, chat.recipient_token_hash);
+      const [tokenHash, sessionHash] = await Promise.all([
+        hashToken(body.token),
+        hashToken(body.sessionId),
+      ]);
 
-      if (!isCreator && !isRecipient) {
-        return Response.json({ success: false, error: 'Invalid token' }, { status: 401 });
-      }
+      const { chat, role, error } = this.authorize(tokenHash, sessionHash);
+      if (error) return error;
 
-      // Session binding check
-      if (isCreator && chat.creator_session_hash && !timingSafeEqual(chat.creator_session_hash, sessionHash)) {
-        return Response.json({ success: false, error: 'Session mismatch' }, { status: 403 });
-      }
-      if (isRecipient && chat.recipient_session_hash && !timingSafeEqual(chat.recipient_session_hash, sessionHash)) {
-        return Response.json({ success: false, error: 'Session mismatch' }, { status: 403 });
-      }
-
-      const role = isCreator ? 'creator' : 'recipient';
       const now = Date.now();
-      
       this.sql.exec(
         `UPDATE chats SET current_message = ?, current_sender = ?, message_at = ?, message_read = 0 WHERE id = ?`,
-        ciphertext, role, now, chat.id
+        body.ciphertext, role, now, chat.id
       );
-      
+
       return Response.json({ success: true, messageAt: now });
-      
+
     } else if (path === '/destroy') {
-      const token = url.searchParams.get('token');
-      const sessionId = url.searchParams.get('sessionId');
-      const tokenHash = await this.hashToken(token);
-      const sessionHash = sessionId ? await this.hashToken(sessionId) : null;
-      
-      const rows = this.sql.exec(`SELECT * FROM chats LIMIT 1`).toArray();
-      
-      if (rows.length === 0) {
-        return Response.json({ success: false, error: 'Chat not found or already destroyed' });
-      }
-      
-      const chat = rows[0];
-      
-      const isCreator = timingSafeEqual(tokenHash, chat.creator_token_hash);
-      const isRecipient = timingSafeEqual(tokenHash, chat.recipient_token_hash);
+      const [tokenHash, sessionHash] = await Promise.all([
+        hashToken(url.searchParams.get('token')),
+        hashToken(url.searchParams.get('sessionId')),
+      ]);
 
-      if (!isCreator && !isRecipient) {
-        return Response.json({ success: false, error: 'Invalid token' }, { status: 401 });
-      }
+      const { chat, error } = this.authorize(tokenHash, sessionHash);
+      if (error) return error;
 
-      // Session check for destroy (if session exists)
-      if (sessionHash) {
-        if (isCreator && chat.creator_session_hash && !timingSafeEqual(chat.creator_session_hash, sessionHash)) {
-          return Response.json({ success: false, error: 'Session mismatch' }, { status: 403 });
-        }
-        if (isRecipient && chat.recipient_session_hash && !timingSafeEqual(chat.recipient_session_hash, sessionHash)) {
-          return Response.json({ success: false, error: 'Session mismatch' }, { status: 403 });
-        }
-      }
-      
       this.sql.exec(`DELETE FROM chats WHERE id = ?`, chat.id);
-      
+
       return Response.json({ success: true, message: 'Chat destroyed' });
-      
-    } else if (path === '/cleanup-all') {
-      const now = Date.now();
-      this.sql.exec(`DELETE FROM chats WHERE expires_at < ?`, now);
-      return Response.json({ success: true });
     }
 
     return new Response('Not Found', { status: 404 });
   }
 
-  async hashToken(token) {
-    if (!token) return null;
-    const data = encoder.encode(token);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    return Array.from(new Uint8Array(hashBuffer), b => b.toString(16).padStart(2, '0')).join('');
+  // Returns { chat, role, sessionCol } on success, { error: Response } on failure.
+  // Session check is skipped when sessionHash is null (destroy without sessionId).
+  authorize(tokenHash, sessionHash) {
+    const rows = this.sql.exec(`SELECT * FROM chats LIMIT 1`).toArray();
+    if (rows.length === 0) {
+      return { error: Response.json({ success: false, error: 'Chat not found or expired' }) };
+    }
+
+    const chat = rows[0];
+    if (Date.now() > chat.expires_at) {
+      this.sql.exec(`DELETE FROM chats WHERE id = ?`, chat.id);
+      return { error: Response.json({ success: false, error: 'Chat has expired' }) };
+    }
+
+    const isCreator = timingSafeEqual(tokenHash, chat.creator_token_hash);
+    const isRecipient = timingSafeEqual(tokenHash, chat.recipient_token_hash);
+    if (!isCreator && !isRecipient) {
+      return { error: Response.json({ success: false, error: 'Invalid token' }, { status: 401 }) };
+    }
+
+    const sessionCol = isCreator ? 'creator_session_hash' : 'recipient_session_hash';
+    if (sessionHash && chat[sessionCol] && !timingSafeEqual(chat[sessionCol], sessionHash)) {
+      return { error: Response.json({ success: false, error: 'Session mismatch - this chat is bound to another browser' }, { status: 403 }) };
+    }
+
+    return { chat, role: isCreator ? 'creator' : 'recipient', sessionCol };
   }
 
-  cleanupExpired() {
-    const now = Date.now();
-    this.sql.exec(`DELETE FROM chats WHERE expires_at < ?`, now);
+  async alarm() {
+    this.sql.exec(`DELETE FROM chats`);
   }
 }
 
@@ -587,43 +449,16 @@ export class StatsStore extends DurableObject {
     this.sql = ctx.storage.sql;
 
     ctx.blockConcurrencyWhile(async () => {
-      // Check if old schema exists (with 'count' column)
-      try {
-        const tableInfo = this.sql.exec(`PRAGMA table_info(stats)`).toArray();
-        const hasOldCount = tableInfo.some(col => col.name === 'count');
-        const hasNoteCount = tableInfo.some(col => col.name === 'note_count');
-        
-        if (hasOldCount && !hasNoteCount) {
-          // Migrate from old schema to new schema
-          this.sql.exec(`ALTER TABLE stats RENAME COLUMN count TO note_count`);
-          try {
-            this.sql.exec(`ALTER TABLE stats ADD COLUMN chat_count INTEGER NOT NULL DEFAULT 0`);
-          } catch (e) {}
-        } else if (!hasNoteCount) {
-          // Fresh install - create new schema
-          this.sql.exec(`
-            CREATE TABLE IF NOT EXISTS stats (
-              date TEXT PRIMARY KEY,
-              note_count INTEGER NOT NULL DEFAULT 0,
-              chat_count INTEGER NOT NULL DEFAULT 0
-            )
-          `);
-        } else {
-          // Already migrated, just ensure chat_count exists
-          try {
-            this.sql.exec(`ALTER TABLE stats ADD COLUMN chat_count INTEGER NOT NULL DEFAULT 0`);
-          } catch (e) {}
-        }
-      } catch (e) {
-        // Table doesn't exist, create it fresh
-        this.sql.exec(`
-          CREATE TABLE IF NOT EXISTS stats (
-            date TEXT PRIMARY KEY,
-            note_count INTEGER NOT NULL DEFAULT 0,
-            chat_count INTEGER NOT NULL DEFAULT 0
-          )
-        `);
-      }
+      this.sql.exec(`
+        CREATE TABLE IF NOT EXISTS stats (
+          date TEXT PRIMARY KEY,
+          note_count INTEGER NOT NULL DEFAULT 0,
+          chat_count INTEGER NOT NULL DEFAULT 0
+        )
+      `);
+      // Legacy schema migration (note-only 'count' column); no-ops once migrated
+      try { this.sql.exec(`ALTER TABLE stats RENAME COLUMN count TO note_count`); } catch (e) {}
+      try { this.sql.exec(`ALTER TABLE stats ADD COLUMN chat_count INTEGER NOT NULL DEFAULT 0`); } catch (e) {}
     });
   }
 
@@ -631,42 +466,40 @@ export class StatsStore extends DurableObject {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    if (path === '/record' && request.method === 'POST') {
+    if (request.method === 'POST' && (path === '/record' || path === '/record-chat')) {
+      const isNote = path === '/record';
       const today = new Date().toISOString().split('T')[0];
       this.sql.exec(`
-        INSERT INTO stats (date, note_count, chat_count) VALUES (?, 1, 0)
-        ON CONFLICT(date) DO UPDATE SET note_count = note_count + 1
-      `, today);
+        INSERT INTO stats (date, note_count, chat_count) VALUES (?, ?, ?)
+        ON CONFLICT(date) DO UPDATE SET
+          note_count = note_count + excluded.note_count,
+          chat_count = chat_count + excluded.chat_count
+      `, today, isNote ? 1 : 0, isNote ? 0 : 1);
       return Response.json({ success: true });
-      
-    } else if (path === '/record-chat' && request.method === 'POST') {
-      const today = new Date().toISOString().split('T')[0];
-      this.sql.exec(`
-        INSERT INTO stats (date, note_count, chat_count) VALUES (?, 0, 1)
-        ON CONFLICT(date) DO UPDATE SET chat_count = chat_count + 1
-      `, today);
-      return Response.json({ success: true });
-      
+
     } else if (path === '/stats') {
       const now = new Date();
-      const oneDayAgo = new Date(now); oneDayAgo.setDate(oneDayAgo.getDate() - 1);
-      const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
-      const monthAgo = new Date(now); monthAgo.setMonth(monthAgo.getMonth() - 1);
-      const yearAgo = new Date(now); yearAgo.setFullYear(yearAgo.getFullYear() - 1);
-      
-      const fmt = d => d.toISOString().split('T')[0];
-      
-      const last24h = this.sql.exec(`SELECT COALESCE(SUM(note_count), 0) as notes, COALESCE(SUM(chat_count), 0) as chats FROM stats WHERE date >= ?`, fmt(oneDayAgo)).toArray()[0] || { notes: 0, chats: 0 };
-      const last7d = this.sql.exec(`SELECT COALESCE(SUM(note_count), 0) as notes, COALESCE(SUM(chat_count), 0) as chats FROM stats WHERE date >= ?`, fmt(weekAgo)).toArray()[0] || { notes: 0, chats: 0 };
-      const last30d = this.sql.exec(`SELECT COALESCE(SUM(note_count), 0) as notes, COALESCE(SUM(chat_count), 0) as chats FROM stats WHERE date >= ?`, fmt(monthAgo)).toArray()[0] || { notes: 0, chats: 0 };
-      const last365d = this.sql.exec(`SELECT COALESCE(SUM(note_count), 0) as notes, COALESCE(SUM(chat_count), 0) as chats FROM stats WHERE date >= ?`, fmt(yearAgo)).toArray()[0] || { notes: 0, chats: 0 };
-      const allTime = this.sql.exec(`SELECT COALESCE(SUM(note_count), 0) as notes, COALESCE(SUM(chat_count), 0) as chats FROM stats`).toArray()[0] || { notes: 0, chats: 0 };
-      const dailyStats = this.sql.exec(`SELECT date, note_count, chat_count FROM stats WHERE date >= ? ORDER BY date ASC`, fmt(monthAgo)).toArray();
-      
+      const daysAgo = n => {
+        const d = new Date(now);
+        d.setDate(d.getDate() - n);
+        return d.toISOString().split('T')[0];
+      };
+      const periods = { last_24h: daysAgo(1), last_7d: daysAgo(7), last_30d: daysAgo(30), last_365d: daysAgo(365), all_time: null };
+
+      const notes = {}, chats = {};
+      for (const [label, since] of Object.entries(periods)) {
+        const row = this.sql.exec(
+          `SELECT COALESCE(SUM(note_count), 0) as notes, COALESCE(SUM(chat_count), 0) as chats FROM stats` + (since ? ` WHERE date >= ?` : ''),
+          ...(since ? [since] : [])
+        ).toArray()[0];
+        notes[label] = Number(row.notes);
+        chats[label] = Number(row.chats);
+      }
+      const dailyStats = this.sql.exec(`SELECT date, note_count, chat_count FROM stats WHERE date >= ? ORDER BY date ASC`, periods.last_30d).toArray();
+
       return Response.json({
-        notes: { last_24h: Number(last24h.notes), last_7d: Number(last7d.notes), last_30d: Number(last30d.notes), last_365d: Number(last365d.notes), all_time: Number(allTime.notes) },
-        chats: { last_24h: Number(last24h.chats), last_7d: Number(last7d.chats), last_30d: Number(last30d.chats), last_365d: Number(last365d.chats), all_time: Number(allTime.chats) },
-        last_24h: Number(last24h.notes), last_7d: Number(last7d.notes), last_30d: Number(last30d.notes), last_365d: Number(last365d.notes), all_time: Number(allTime.notes),
+        notes,
+        chats,
         daily: dailyStats,
         generated_at: now.toISOString()
       });
@@ -1048,7 +881,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 <div id="note-result" class="result">
                     <div class="result-label">Share this link (note will be destroyed after viewing):</div>
                     <div id="note-result-link" class="result-link"></div>
-                    <button class="copy-btn" onclick="copyNoteLink()">Copy Link</button>
+                    <button class="copy-btn" onclick="copyText(this, noteLink, 'Copy Link')">Copy Link</button>
                 </div>
             </div>
             <div class="info note-info">
@@ -1069,7 +902,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 <button id="note-reveal-btn" onclick="revealNote()">Reveal Note</button>
                 <div id="note-display" class="hidden">
                     <div id="note-content" class="message-box"></div>
-                    <button class="copy-btn" onclick="copyNoteContent()">Copy Message</button>
+                    <button class="copy-btn" onclick="copyText(this, document.getElementById('note-content').textContent, 'Copy Message')">Copy Message</button>
                     <button onclick="window.location.href='/'">Create New</button>
                 </div>
             </div>
@@ -1093,7 +926,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 <div id="chat-result" class="result">
                     <div class="result-label">📤 Share this link with your contact:</div>
                     <div id="chat-share-link" class="result-link"></div>
-                    <button class="copy-btn" onclick="copyShareLink()">Copy Share Link</button>
+                    <button class="copy-btn" onclick="copyText(this, shareLink, 'Copy Share Link')">Copy Share Link</button>
                     <div class="button-group" style="margin-top: 1.5rem;">
                         <button class="btn-chat" onclick="goToChat()">Go to Chat →</button>
                     </div>
@@ -1130,7 +963,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
                     <div id="message-display" class="hidden">
                         <div class="message-meta" id="message-meta"></div>
                         <div class="message-box received" id="message-content"></div>
-                        <button class="copy-btn" onclick="copyMessage()">Copy Message</button>
+                        <button class="copy-btn" onclick="copyText(this, document.getElementById('message-content').textContent, 'Copy Message')">Copy Message</button>
                     </div>
                     <div id="waiting-display" class="hidden" style="text-align: center; padding: 2rem;">
                         <p class="info-text">⏳ Waiting for reply...</p>
@@ -1146,7 +979,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
             </div>
             
             <div class="button-group">
-                <button class="btn-secondary" onclick="refreshChat()">🔄 Refresh</button>
+                <button class="btn-secondary" onclick="loadChat()">🔄 Refresh</button>
                 <button class="btn-danger" onclick="destroyChat()">🗑️ Destroy Chat</button>
             </div>
         </div>
@@ -1190,21 +1023,35 @@ const HTML_CONTENT = `<!DOCTYPE html>
     <script>
         const cryptoApi = window.crypto || window.msCrypto;
         
+        function randomHex(byteLength) {
+            const array = new Uint8Array(byteLength);
+            cryptoApi.getRandomValues(array);
+            return Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
+        }
+
         // Session ID management
+        function sessionKey(chatId) {
+            return 'flashpaper_session_' + chatId;
+        }
+
         function getOrCreateSessionId(chatId) {
-            const key = 'flashpaper_session_' + chatId;
-            let sessionId = localStorage.getItem(key);
+            let sessionId = localStorage.getItem(sessionKey(chatId));
             if (!sessionId) {
-                const array = new Uint8Array(32);
-                cryptoApi.getRandomValues(array);
-                sessionId = Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
-                localStorage.setItem(key, sessionId);
+                sessionId = randomHex(32);
+                localStorage.setItem(sessionKey(chatId), sessionId);
             }
             return sessionId;
         }
-        
+
         function clearSessionId(chatId) {
-            localStorage.removeItem('flashpaper_session_' + chatId);
+            localStorage.removeItem(sessionKey(chatId));
+        }
+
+        function copyText(btn, text, label) {
+            navigator.clipboard.writeText(text).then(() => {
+                btn.textContent = 'Copied!';
+                setTimeout(() => btn.textContent = label, 2000);
+            });
         }
         
         async function generateKey() {
@@ -1320,13 +1167,6 @@ const HTML_CONTENT = `<!DOCTYPE html>
             }
         }
         
-        function copyNoteLink() {
-            navigator.clipboard.writeText(noteLink).then(() => {
-                event.target.textContent = 'Copied!';
-                setTimeout(() => event.target.textContent = 'Copy Link', 2000);
-            });
-        }
-        
         async function revealNote() {
             const revealBtn = document.getElementById('note-reveal-btn');
             const noteDisplay = document.getElementById('note-display');
@@ -1358,14 +1198,6 @@ const HTML_CONTENT = `<!DOCTYPE html>
             }
         }
         
-        function copyNoteContent() {
-            const content = document.getElementById('note-content').textContent;
-            navigator.clipboard.writeText(content).then(() => {
-                event.target.textContent = 'Copied!';
-                setTimeout(() => event.target.textContent = 'Copy Message', 2000);
-            });
-        }
-        
         // Chat functions
         async function createChat() {
             const initialMessage = document.getElementById('chat-initial-message').value.trim();
@@ -1379,12 +1211,9 @@ const HTML_CONTENT = `<!DOCTYPE html>
             try {
                 encryptionKey = await generateKey();
                 encryptionKeyStr = await exportKey(encryptionKey);
-                
-                // Generate temp chat ID for session
-                const tempChatId = Math.random().toString(36).substring(2);
-                sessionId = getOrCreateSessionId(tempChatId);
-                
-                const payload = { 
+                sessionId = randomHex(32);
+
+                const payload = {
                     ttl_seconds: parseInt(ttlSelect.value),
                     sessionId: sessionId
                 };
@@ -1404,9 +1233,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 chatId = data.id;
                 userToken = data.creatorToken;
                 
-                // Update session to use real chat ID
-                clearSessionId(tempChatId);
-                localStorage.setItem('flashpaper_session_' + chatId, sessionId);
+                localStorage.setItem(sessionKey(chatId), sessionId);
                 
                 creatorLink = location.origin + '/chat/' + chatId + '#' + encryptionKeyStr + ':' + data.creatorToken;
                 shareLink = location.origin + '/chat/' + chatId + '#' + encryptionKeyStr + ':' + data.recipientToken;
@@ -1420,13 +1247,6 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 createBtn.disabled = false;
                 createBtn.innerHTML = 'Start Secure Chat';
             }
-        }
-        
-        function copyShareLink() {
-            navigator.clipboard.writeText(shareLink).then(() => {
-                event.target.textContent = 'Copied!';
-                setTimeout(() => event.target.textContent = 'Copy Share Link', 2000);
-            });
         }
         
         function goToChat() {
@@ -1558,18 +1378,6 @@ const HTML_CONTENT = `<!DOCTYPE html>
             }
         }
         
-        function copyMessage() {
-            const content = document.getElementById('message-content').textContent;
-            navigator.clipboard.writeText(content).then(() => {
-                event.target.textContent = 'Copied!';
-                setTimeout(() => event.target.textContent = 'Copy Message', 2000);
-            });
-        }
-        
-        function refreshChat() {
-            loadChat();
-        }
-        
         // Custom Modal Functions (for Twitter/X browser compatibility)
         function showModal() {
             document.getElementById('modal-overlay').classList.add('show');
@@ -1627,33 +1435,31 @@ const HTML_CONTENT = `<!DOCTYPE html>
             }
         }
         
+        function showMode(id) {
+            document.getElementById('tabs').classList.add('hidden');
+            ['note-create-mode', 'note-view-mode', 'chat-create-mode', 'chat-session-mode', 'error-mode']
+                .forEach(m => document.getElementById(m).classList.add('hidden'));
+            document.getElementById(id).classList.remove('hidden');
+        }
+
         function showError(message) {
             stopAutoRefresh();
-            document.getElementById('tabs').classList.add('hidden');
-            document.getElementById('note-create-mode').classList.add('hidden');
-            document.getElementById('note-view-mode').classList.add('hidden');
-            document.getElementById('chat-create-mode').classList.add('hidden');
-            document.getElementById('chat-session-mode').classList.add('hidden');
-            document.getElementById('error-mode').classList.remove('hidden');
+            showMode('error-mode');
             document.getElementById('error-message').textContent = message;
         }
-        
+
         // Initialize
         (function init() {
             const path = location.pathname;
             const hash = location.hash.substring(1);
-            
+
             if (path.startsWith('/view/')) {
-                document.getElementById('tabs').classList.add('hidden');
-                document.getElementById('note-create-mode').classList.add('hidden');
-                document.getElementById('note-view-mode').classList.remove('hidden');
+                showMode('note-view-mode');
                 document.getElementById('main-title').className = 'note-mode';
             } else if (path.match(/^\\/chat\\/[^/]+$/)) {
-                document.getElementById('tabs').classList.add('hidden');
-                document.getElementById('note-create-mode').classList.add('hidden');
-                document.getElementById('chat-session-mode').classList.remove('hidden');
+                showMode('chat-session-mode');
                 document.getElementById('main-title').className = 'chat-mode';
-                
+
                 chatId = path.split('/chat/')[1];
                 if (hash) {
                     const parts = hash.split(':');
@@ -1674,8 +1480,6 @@ const HTML_CONTENT = `<!DOCTYPE html>
             } else {
                 switchTab('note');
             }
-            
-            window.addEventListener('beforeunload', stopAutoRefresh);
         })();
     </script>
     <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "{{CF_ANALYTICS_TOKEN}}"}'></script><!-- End Cloudflare Web Analytics -->
