@@ -10,7 +10,7 @@ Only the latest deployed version is supported.
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability, please report it via [GitHub Security Advisories](https://github.com/masanarihigashi/flashpaper/security/advisories/new).
+If you discover a security vulnerability, please report it via [GitHub Security Advisories](https://github.com/M-Igashi/flashpaper/security/advisories/new).
 
 - **Do NOT open a public issue** for security vulnerabilities.
 - You can expect an initial response within 7 days.
